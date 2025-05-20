@@ -1,0 +1,40 @@
+modules = ["bash"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["bc"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "SysMonWorkflow"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "bash_tool"
+
+[[workflows.workflow]]
+name = "SysMonWorkflow"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "chmod +x sysmon.sh lib/*.sh install.sh && ./sysmon.sh --help"
+
+[[workflows.workflow]]
+name = "bash_tool"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "./install.sh && chmod +x sysmon.sh && ./sysmon.sh --check"
+
+[deployment]
+run = ["sh", "-c", "chmod +x sysmon.sh lib/*.sh install.sh && ./sysmon.sh --help"]
