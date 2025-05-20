@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# ServerSentry - Configuration Management
+# ServerSentry - Configuration Management (merged and improved)
 
-# Define the configuration directories and files
+# Get the root script directory (one level up from lib)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-SCRIPT_DIR="$(dirname "$SCRIPT_DIR")"  # Go up one level to get to the root
+SCRIPT_DIR="$(dirname "$SCRIPT_DIR")"
 CONFIG_DIR="$SCRIPT_DIR/config"
 THRESHOLDS_FILE="$CONFIG_DIR/thresholds.conf"
 WEBHOOKS_FILE="$CONFIG_DIR/webhooks.conf"
@@ -151,8 +151,11 @@ update_threshold() {
         # Check if the threshold already exists in the file
         if grep -q "^$name=" "$THRESHOLDS_FILE"; then
             # Update existing threshold
-            sed -i.bak "s/^$name=.*/$name=$value/" "$THRESHOLDS_FILE" || \
-            sed -i "s/^$name=.*/$name=$value/" "$THRESHOLDS_FILE"
+            if sed --version 2>/dev/null | grep -q GNU; then
+                sed -i "s/^$name=.*/$name=$value/" "$THRESHOLDS_FILE"
+            else
+                sed -i '' "s/^$name=.*/$name=$value/" "$THRESHOLDS_FILE"
+            fi
         else
             # Add new threshold
             echo "$name=$value" >> "$THRESHOLDS_FILE"
@@ -191,31 +194,38 @@ update_threshold() {
 # Add a new webhook endpoint
 add_webhook() {
     local url="$1"
+    # Remove any escaping from the URL before storing
+    url=$(echo "$url" | sed 's/\\//g')
     
-    # Validate the URL
     if ! is_valid_url "$url"; then
         log_message "ERROR" "Invalid webhook URL: $url"
+        echo "[ERROR] Invalid webhook URL: $url"
         return 1
     fi
-    
-    # Load existing webhooks
     load_webhooks
-    
-    # Check if the webhook already exists
     for webhook in "${WEBHOOKS[@]}"; do
         if [ "$webhook" == "$url" ]; then
             log_message "WARNING" "Webhook already exists: $url"
+            echo "[WARNING] Webhook already exists: $url"
             return 0
         fi
     done
-    
-    # Add the new webhook to the file
     echo "$url" >> "$WEBHOOKS_FILE"
-    
-    # Add to the array as well
     WEBHOOKS+=("$url")
-    
     log_message "INFO" "Added webhook: $url"
+    echo "Webhook added: $url"
+    # Immediately send a test notification
+    if [[ "$(type -t send_webhook_notification)" != "function" ]]; then
+        source "$SCRIPT_DIR/lib/notify.sh"
+    fi
+    echo "Testing webhook..."
+    send_webhook_notification "$url" "Test" "This is a test notification from ServerSentry (add_webhook)."
+    local status=$?
+    if [ $status -eq 0 ]; then
+        echo "[SUCCESS] Webhook test notification sent successfully."
+    else
+        echo "[ERROR] Webhook test notification failed. Please check the URL or your endpoint."
+    fi
     return 0
 }
 

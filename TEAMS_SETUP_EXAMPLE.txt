@@ -1,0 +1,188 @@
+Power Automate Flow Configuration for ServerSentry
+=============================================
+
+1. TRIGGER: HTTP REQUEST
+-----------------------
+Name: When a HTTP request is received
+No schema required (optional schema shown below)
+
+Example Schema:
+{
+    "type": "object",
+    "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "hostname": { "type": "string" },
+        "ip": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "source": { "type": "string" },
+        "os": { "type": "string" },
+        "kernel": { "type": "string" },
+        "uptime": { "type": "string" },
+        "loadavg": { "type": "string" },
+        "cpu": { "type": "string" },
+        "cpu_usage": { "type": "string" },
+        "memory": { "type": "string" },
+        "memory_usage": { "type": "string" },
+        "disk": { "type": "string" },
+        "disk_usage": { "type": "string" },
+        "status": { "type": "string" },
+        "content": { "type": "object" },
+        "attachments": { "type": "array" }
+    }
+}
+
+2. METHOD 1: USE THE AUTOMATIC ADAPTIVE CARD WITH "FOR EACH" LOOP (RECOMMENDED)
+-----------------------------------------------------------------------------
+This pattern uses a "For each" action to iterate through the attachments array:
+
+1. Add "For each" action with this value: @triggerOutputs()?['body']?['attachments']
+
+2. Inside the For each loop, add "Post a message in a chat or channel" action:
+   Team ID: (Select your team)
+   Channel ID: (Select your channel)
+   Message body: @item()?['content']
+   
+Note: ServerSentry formats the webhook payload with the exact Teams schema:
+```json
+{
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "type": "AdaptiveCard",
+        "body": [ ... ]
+      }
+    }
+  ]
+}
+```
+This format is required for the "For each" loop approach to work correctly with Teams.
+
+3. METHOD 2: DIRECT ADAPTIVE CARD POSTING
+----------------------------------------
+Use the pre-formatted adaptive card that ServerSentry provides
+
+1. Add "Post adaptive card in a chat or channel" Action:
+Team ID: (Select your team)
+Channel ID: (Select your channel)
+
+For the Adaptive Card JSON, use: @{triggerBody()?['content']}
+
+- This uses the pre-formatted adaptive card that ServerSentry generates
+- Includes expandable sections for more details
+- Has proper coloring based on alert type
+- Includes all system metrics in a well-organized layout
+
+4. METHOD 3: FORMATTED HTML MESSAGE
+---------------------------------
+If you prefer a simpler approach, use a plain HTML message
+
+1. Add "Post a message in a chat or channel" Action:
+Team ID: (Select your team)
+Channel ID: (Select your channel)
+
+For the message body, use:
+```
+<p><b>@{triggerBody()?['title']}</b></p>
+<p>@{triggerBody()?['message']}</p>
+<p>
+<b>Server:</b> @{triggerBody()?['hostname']} (@{triggerBody()?['ip']})<br/>
+<b>CPU Usage:</b> @{triggerBody()?['cpu_usage']}<br/>
+<b>Memory Usage:</b> @{triggerBody()?['memory_usage']}<br/>
+<b>Disk Usage:</b> @{triggerBody()?['disk_usage']}<br/>
+<b>Uptime:</b> @{triggerBody()?['uptime']}<br/>
+<b>Time:</b> @{triggerBody()?['timestamp']}<br/>
+</p>
+```
+
+5. METHOD 4: CREATE YOUR OWN ADAPTIVE CARD
+----------------------------------------
+For customized cards, define your own JSON structure
+
+1. Add a "Compose" action and set the inputs to:
+```
+{
+    "type": "AdaptiveCard",
+    "body": [
+        {
+            "type": "TextBlock",
+            "text": "@{triggerBody()?['title']}",
+            "weight": "Bolder",
+            "size": "Large",
+            "color": "@{if(contains(triggerBody()?['title'], 'CPU'), 'attention', if(contains(triggerBody()?['title'], 'Test'), 'accent', 'default'))}"
+        },
+        {
+            "type": "TextBlock",
+            "text": "@{triggerBody()?['message']}",
+            "wrap": true
+        },
+        {
+            "type": "ColumnSet",
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "items": [
+                        {
+                            "type": "FactSet",
+                            "facts": [
+                                { "title": "Server", "value": "@{triggerBody()?['hostname']}" },
+                                { "title": "IP", "value": "@{triggerBody()?['ip']}" },
+                                { "title": "OS", "value": "@{triggerBody()?['os']}" }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "items": [
+                        {
+                            "type": "FactSet",
+                            "facts": [
+                                { "title": "CPU", "value": "@{triggerBody()?['cpu_usage']}" },
+                                { "title": "Memory", "value": "@{triggerBody()?['memory_usage']}" },
+                                { "title": "Disk", "value": "@{triggerBody()?['disk_usage']}" }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "type": "Action.OpenUrl",
+            "title": "Server Documentation",
+            "url": "https://your-docs-site.com"
+        }
+    ],
+    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+    "version": "1.2"
+}
+```
+
+2. Add "Post adaptive card in a chat or channel" action and use the Compose output as the card JSON
+
+6. SAVE AND TEST
+---------------
+1. Save your flow and make note of the HTTP POST URL
+2. Add the webhook URL to ServerSentry:
+   ```
+   ./serversentry.sh --add-webhook "your-flow-url-here"
+   ```
+3. Test the integration:
+   ```
+   ./serversentry.sh --test-webhook
+   ```
+4. Check your Teams channel for the message
+
+7. DEBUGGING TIPS
+---------------
+- The "Adaptive Card Designer" at https://adaptivecards.io/designer/ is helpful for testing card designs
+- Use the "run history" in Power Automate to see the exact JSON payload received
+- For Teams messages, use HTML formatting to make messages more readable
+- If adaptive cards aren't displaying, try the simpler HTML message approach first
+- Look for specific HTTP response codes when debugging webhook issues
+- If using "For each" loops, ensure your JSON includes an "attachments" array 
