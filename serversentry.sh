@@ -28,7 +28,7 @@ touch "$LOG_FILE" 2>/dev/null || {
 
 # Command-line argument handling
 show_help() {
-    echo "SysMon - System Monitoring Tool"
+    echo "ServerSentry - System Monitoring & Alert Tool"
     echo ""
     echo "Usage: $0 [options]"
     echo ""

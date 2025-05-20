@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# SysMon - Utility functions
+# ServerSentry - Utility functions
 
 # Global variables
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
