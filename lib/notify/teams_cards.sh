@@ -122,6 +122,11 @@ create_progress_bar() {
     echo "$bar"
 }
 
+# Create teams card function (called from main.sh)
+create_teams_card() {
+    create_adaptive_card "$@"
+}
+
 # Create adaptive card JSON for Microsoft Teams
 create_adaptive_card() {
     local title="$1"

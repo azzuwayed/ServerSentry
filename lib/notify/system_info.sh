@@ -3,20 +3,21 @@
 # ServerSentry - System Information Module
 # Part of the modular notify system
 
-# Check if utils.sh is sourced
+# Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-SCRIPT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+PARENT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
+# Check if utils.sh is sourced
 if [[ "$(type -t log_message)" != "function" ]]; then
-    source "$SCRIPT_DIR/lib/utils.sh"
+    source "$PARENT_DIR/lib/utils.sh"
 fi
 
 if [[ "$(type -t command_exists)" != "function" ]]; then
-    source "$SCRIPT_DIR/lib/utils.sh"
+    source "$PARENT_DIR/lib/utils.sh"
 fi
 
 # Get system information for detailed reports
-get_system_info() {
+get_system_info_data() {
     local hostname=$(hostname)
     local os_info=""
     local kernel=""

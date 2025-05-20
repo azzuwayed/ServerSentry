@@ -21,6 +21,11 @@ if [[ "$(type -t create_adaptive_card)" != "function" ]]; then
     source "$SCRIPT_DIR/teams_cards.sh"
 fi
 
+# Wrapper function that main.sh calls
+format_payload() {
+    format_webhook_payload "$@"
+}
+
 # Format the webhook payload based on the provider
 format_webhook_payload() {
     local url="$1"

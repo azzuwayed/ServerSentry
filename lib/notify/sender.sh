@@ -26,6 +26,11 @@ if command_exists jq; then
     HAS_JQ=1
 fi
 
+# Function that main.sh calls
+send_webhook() {
+    send_webhook_notification "$@"
+}
+
 # Send a webhook notification
 send_webhook_notification() {
     local url="$1"

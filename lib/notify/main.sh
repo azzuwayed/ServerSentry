@@ -30,23 +30,27 @@ send_webhook_notification() {
     local message="$3"
     
     # Delegate to the sender module
-    "$SCRIPT_DIR/sender.sh" "$url" "$title" "$message"
+    source "$SCRIPT_DIR/sender.sh"
+    send_webhook "$url" "$title" "$message"
 }
 
 # Export the system_info getter function
 get_system_info() {
     # Delegate to the system_info module
-    "$SCRIPT_DIR/system_info.sh" "$@"
+    source "$SCRIPT_DIR/system_info.sh"
+    get_system_info_data "$@"
 }
 
 # Function to create adaptive card for Microsoft Teams
 create_adaptive_card() {
     # Delegate to the teams_cards module
-    "$SCRIPT_DIR/teams_cards.sh" "$@"
+    source "$SCRIPT_DIR/teams_cards.sh"
+    create_teams_card "$@"
 }
 
 # Function to format webhook payload based on URL
 format_webhook_payload() {
     # Delegate to the formatters module
-    "$SCRIPT_DIR/formatters.sh" "$@"
+    source "$SCRIPT_DIR/formatters.sh"
+    format_payload "$@"
 } 
