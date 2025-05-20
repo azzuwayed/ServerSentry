@@ -84,23 +84,4 @@ get_timestamp() {
     date "+%Y-%m-%d %H:%M:%S"
 }
 
-# Clean up old log files (cross-platform)
-rotate_logs() {
-    local size=0
-    if [ -f "$LOG_FILE" ]; then
-        if command_exists stat; then
-            size=$(stat -c %s "$LOG_FILE" 2>/dev/null || stat -f %z "$LOG_FILE" 2>/dev/null || echo 0)
-        fi
-        if [ "$size" -gt 10485760 ]; then  # 10MB
-            local timestamp=$(date "+%Y%m%d%H%M%S")
-            mv "$LOG_FILE" "${LOG_FILE}.${timestamp}"
-            touch "$LOG_FILE"
-            log_message "INFO" "Log file rotated to ${LOG_FILE}.${timestamp}"
-            # Keep only the 5 most recent log files
-            ls -t "${LOG_FILE}."* 2>/dev/null | tail -n +6 | xargs -r rm
-        fi
-    fi
-}
-
-# Initialize on source
-rotate_logs
+# Note: Log rotation is now handled by lib/logrotate.sh

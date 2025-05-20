@@ -58,6 +58,8 @@ source "$SCRIPT_DIR/lib/utils.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/monitor.sh"
 source "$SCRIPT_DIR/lib/notify.sh"
+source "$SCRIPT_DIR/lib/periodic.sh"
+source "$SCRIPT_DIR/lib/logrotate.sh"
 
 # Initialize log file if it doesn't exist
 touch "$LOG_FILE" 2>/dev/null || {
@@ -82,10 +84,25 @@ show_help() {
     echo "  -u, --update N=VALUE   Update threshold (e.g., cpu_threshold=85)"
     echo "  -l, --list             List all thresholds and webhooks"
     echo ""
+    echo "Periodic Reports:"
+    echo "  --periodic run         Run a periodic check now"
+    echo "  --periodic status      Show periodic checks status"
+    echo "  --periodic config      Configure periodic checks"
+    echo "                         e.g., --periodic config report_interval 3600"
+    echo ""
+    echo "Log Management:"
+    echo "  --logs status          Show log rotation status"
+    echo "  --logs rotate          Rotate logs now"
+    echo "  --logs clean           Clean up old log files"
+    echo "  --logs config          Configure log rotation"
+    echo "                         e.g., --logs config max_age_days 14"
+    echo ""
     echo "Examples:"
     echo "  $0 --check                  # Run a one-time check"
     echo "  $0 --update cpu_threshold=90 # Set CPU threshold to 90%"
     echo "  $0 --add-webhook https://example.com/webhook # Add webhook endpoint"
+    echo "  $0 --periodic config report_level detailed   # Set detailed reports"
+    echo "  $0 --logs config max_size_mb 20              # Set log rotation size"
 }
 
 run_check() {
@@ -352,6 +369,83 @@ while [ $# -gt 0 ]; do
             print_config
             exit 0
             ;;
+        --periodic)
+            if [ -z "$2" ]; then
+                echo "Error: Periodic command is required (run, status, config)"
+                exit 1
+            fi
+            
+            case "$2" in
+                run)
+                    periodic_main run
+                    exit $?
+                    ;;
+                    
+                status)
+                    periodic_main status
+                    exit $?
+                    ;;
+                    
+                config)
+                    if [ -z "$3" ] || [ -z "$4" ]; then
+                        echo "Error: Parameter name and value required"
+                        echo "Usage: $0 --periodic config <parameter> <value>"
+                        echo "Parameters: report_interval, report_level, report_checks, force_report, report_time, report_days"
+                        exit 1
+                    fi
+                    periodic_main config "$3" "$4"
+                    exit $?
+                    ;;
+                    
+                *)
+                    echo "Unknown periodic command: $2"
+                    echo "Available commands: run, status, config"
+                    exit 1
+                    ;;
+            esac
+            shift 2
+            ;;
+        --logs)
+            if [ -z "$2" ]; then
+                echo "Error: Log command is required (status, rotate, clean, config)"
+                exit 1
+            fi
+            
+            case "$2" in
+                status)
+                    logrotate_main status
+                    exit $?
+                    ;;
+                    
+                rotate)
+                    logrotate_main rotate
+                    exit $?
+                    ;;
+                    
+                clean)
+                    logrotate_main clean
+                    exit $?
+                    ;;
+                    
+                config)
+                    if [ -z "$3" ] || [ -z "$4" ]; then
+                        echo "Error: Parameter name and value required"
+                        echo "Usage: $0 --logs config <parameter> <value>"
+                        echo "Parameters: max_size_mb, max_age_days, max_files, compress, rotate_on_start"
+                        exit 1
+                    fi
+                    logrotate_main config "$3" "$4"
+                    exit $?
+                    ;;
+                    
+                *)
+                    echo "Unknown log command: $2"
+                    echo "Available commands: status, rotate, clean, config"
+                    exit 1
+                    ;;
+            esac
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             show_help
@@ -360,5 +454,8 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+# Perform log maintenance on every run
+maintain_logs
 
 exit 0

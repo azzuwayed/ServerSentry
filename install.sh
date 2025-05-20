@@ -91,6 +91,8 @@ set_permissions() {
         chmod +x "$SCRIPT_DIR/lib/monitor.sh"
         chmod +x "$SCRIPT_DIR/lib/notify.sh"
         chmod +x "$SCRIPT_DIR/lib/utils.sh"
+        chmod +x "$SCRIPT_DIR/lib/periodic.sh"
+        chmod +x "$SCRIPT_DIR/lib/logrotate.sh"
     fi
     
     echo -e "${GREEN}Done!${NC}"
@@ -101,6 +103,7 @@ create_config_files() {
     echo ""
     echo "Creating configuration files..."
     mkdir -p "$SCRIPT_DIR/config"
+    mkdir -p "$SCRIPT_DIR/logs/archive"
     
     if [ ! -f "$SCRIPT_DIR/config/thresholds.conf" ]; then
         cat > "$SCRIPT_DIR/config/thresholds.conf" <<EOF
@@ -126,6 +129,75 @@ EOF
         echo -e "  ${GREEN}Created${NC} webhooks.conf"
     else
         echo -e "  ${YELLOW}Skipped${NC} webhooks.conf (already exists)"
+    fi
+    
+    # Create log rotation configuration file
+    if [ ! -f "$SCRIPT_DIR/config/logrotate.conf" ]; then
+        cat > "$SCRIPT_DIR/config/logrotate.conf" <<EOF
+# ServerSentry Log Rotation Configuration
+
+# Maximum size in MB before rotation (0 = no size limit)
+max_size_mb=10
+
+# Maximum age in days before deletion (0 = never delete based on age)
+max_age_days=30
+
+# Maximum number of rotated log files to keep (0 = keep all)
+max_files=10
+
+# Compress rotated logs (true/false)
+compress=true
+
+# Rotate logs on application start (true/false)
+rotate_on_start=false
+
+# End of configuration
+EOF
+        echo -e "  ${GREEN}Created${NC} logrotate.conf"
+    else
+        echo -e "  ${YELLOW}Skipped${NC} logrotate.conf (already exists)"
+    fi
+
+    # Copy the periodic cron template
+    if [ ! -f "$SCRIPT_DIR/config/periodic_cron.template" ]; then
+        # Create directory if needed
+        mkdir -p "$SCRIPT_DIR/config"
+        
+        # Create the template file
+        cat > "$SCRIPT_DIR/config/periodic_cron.template" <<EOF
+# ServerSentry - Periodic Checks Cron Template
+# 
+# This file contains example cron entries for automated periodic reports.
+# To use: Copy and paste the appropriate line into your crontab (crontab -e)
+# Be sure to replace /path/to with the actual path to your ServerSentry installation.
+
+# Run periodic check every hour
+0 * * * * $SCRIPT_DIR/serversentry.sh --periodic run >> $SCRIPT_DIR/serversentry.log 2>&1
+
+# Run periodic check at specific times (9 AM daily)
+0 9 * * * $SCRIPT_DIR/serversentry.sh --periodic run >> $SCRIPT_DIR/serversentry.log 2>&1
+
+# Run periodic check every 6 hours
+0 */6 * * * $SCRIPT_DIR/serversentry.sh --periodic run >> $SCRIPT_DIR/serversentry.log 2>&1
+
+# Run checks only on weekdays (Monday through Friday) at 9 AM
+0 9 * * 1-5 $SCRIPT_DIR/serversentry.sh --periodic run >> $SCRIPT_DIR/serversentry.log 2>&1
+
+# Run check once every Monday and Thursday at 9 AM
+0 9 * * 1,4 $SCRIPT_DIR/serversentry.sh --periodic run >> $SCRIPT_DIR/serversentry.log 2>&1
+
+# Run log rotation daily at midnight
+0 0 * * * $SCRIPT_DIR/serversentry.sh --logs rotate >> $SCRIPT_DIR/serversentry.log 2>&1
+
+# NOTE: You can configure the report behavior using the config file at:
+# $SCRIPT_DIR/config/periodic.conf
+#
+# Or use the command-line interface:
+# $SCRIPT_DIR/serversentry.sh --periodic config report_level detailed
+EOF
+        echo -e "  ${GREEN}Created${NC} periodic_cron.template"
+    else
+        echo -e "  ${YELLOW}Skipped${NC} periodic_cron.template (already exists)"
     fi
 }
 
@@ -425,6 +497,316 @@ print_usage() {
     read -p "Press Enter to continue..." dummy
 }
 
+# Configure periodic reporting
+setup_periodic_reports() {
+    clear
+    echo -e "${CYAN}┌───────────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│         Configure Periodic System Reports             │${NC}"
+    echo -e "${CYAN}└───────────────────────────────────────────────────────┘${NC}"
+    
+    echo -e "\nPeriodic reports send system status to configured webhooks on a schedule."
+    echo -e "You can use this to receive daily/weekly summaries or regular health checks.\n"
+    
+    # First ensure the config file exists
+    "$SCRIPT_DIR/serversentry.sh" --periodic status > /dev/null 2>&1
+    
+    echo -e "${BLUE}Current configuration:${NC}"
+    "$SCRIPT_DIR/serversentry.sh" --periodic status | grep -v "No report history"
+    echo ""
+    
+    # Let user select which settings to change
+    echo -e "${BLUE}What would you like to configure?${NC}"
+    echo -e "1) Report frequency"
+    echo -e "2) Report level (detail)"
+    echo -e "3) Checks to include"
+    echo -e "4) Force reporting (send even when no issues)"
+    echo -e "5) Schedule specific days"
+    echo -e "6) Set up a cron job"
+    echo -e "7) Return to main menu"
+    
+    echo ""
+    read -p "Select option (1-7): " option
+    
+    case "$option" in
+        1)
+            echo -e "\n${BLUE}Select report frequency:${NC}"
+            echo -e "1) Hourly"
+            echo -e "2) Every 6 hours"
+            echo -e "3) Daily"
+            echo -e "4) Weekly"
+            echo -e "5) Custom interval (in seconds)"
+            echo ""
+            read -p "Select frequency (1-5): " freq
+            
+            case "$freq" in
+                1) "$SCRIPT_DIR/serversentry.sh" --periodic config report_interval 3600 ;;
+                2) "$SCRIPT_DIR/serversentry.sh" --periodic config report_interval 21600 ;;
+                3) "$SCRIPT_DIR/serversentry.sh" --periodic config report_interval 86400 ;;
+                4) "$SCRIPT_DIR/serversentry.sh" --periodic config report_interval 604800 ;;
+                5)
+                    read -p "Enter interval in seconds: " custom_interval
+                    "$SCRIPT_DIR/serversentry.sh" --periodic config report_interval "$custom_interval"
+                    ;;
+                *) echo -e "${RED}Invalid option${NC}" ;;
+            esac
+            ;;
+        2)
+            echo -e "\n${BLUE}Select report detail level:${NC}"
+            echo -e "1) Minimal (only alerts)"
+            echo -e "2) Summary (basic info + alerts)"
+            echo -e "3) Detailed (comprehensive system info)"
+            echo ""
+            read -p "Select level (1-3): " level
+            
+            case "$level" in
+                1) "$SCRIPT_DIR/serversentry.sh" --periodic config report_level minimal ;;
+                2) "$SCRIPT_DIR/serversentry.sh" --periodic config report_level summary ;;
+                3) "$SCRIPT_DIR/serversentry.sh" --periodic config report_level detailed ;;
+                *) echo -e "${RED}Invalid option${NC}" ;;
+            esac
+            ;;
+        3)
+            echo -e "\n${BLUE}Select checks to include (comma-separated):${NC}"
+            echo -e "Available checks: cpu, memory, disk, load, processes, network, all"
+            echo -e "Example: cpu,memory,disk"
+            echo ""
+            read -p "Enter checks: " checks
+            
+            "$SCRIPT_DIR/serversentry.sh" --periodic config report_checks "$checks"
+            ;;
+        4)
+            echo -e "\n${BLUE}Force sending reports even when no issues detected?${NC}"
+            echo -e "This will send a report regardless of whether thresholds are exceeded."
+            echo ""
+            read -p "Force reports (y/n): " force
+            
+            if [[ "$force" =~ ^[Yy]$ ]]; then
+                "$SCRIPT_DIR/serversentry.sh" --periodic config force_report true
+            else
+                "$SCRIPT_DIR/serversentry.sh" --periodic config force_report false
+            fi
+            ;;
+        5)
+            echo -e "\n${BLUE}Schedule specific days of the week:${NC}"
+            echo -e "Enter days as comma-separated list (1=Monday, 7=Sunday)"
+            echo -e "Example: 1,3,5 for Monday, Wednesday, Friday"
+            echo -e "Leave empty to run every day"
+            echo ""
+            read -p "Enter days: " days
+            
+            if [ -n "$days" ]; then
+                "$SCRIPT_DIR/serversentry.sh" --periodic config report_days "$days"
+                
+                echo -e "\n${BLUE}Set time of day (24-hour format, UTC):${NC}"
+                read -p "Enter time (HH:MM): " time
+                
+                if [ -n "$time" ]; then
+                    "$SCRIPT_DIR/serversentry.sh" --periodic config report_time "$time"
+                fi
+            else
+                # Empty days - clear the schedule
+                "$SCRIPT_DIR/serversentry.sh" --periodic config report_days ""
+                "$SCRIPT_DIR/serversentry.sh" --periodic config report_time ""
+            fi
+            ;;
+        6)
+            echo -e "\n${BLUE}Cron Job Setup${NC}"
+            echo -e "This will show example cron entries for your installation."
+            echo -e "You can copy and paste these into your crontab (crontab -e)."
+            echo ""
+            
+            if [ -f "$SCRIPT_DIR/config/periodic_cron.template" ]; then
+                cat "$SCRIPT_DIR/config/periodic_cron.template"
+            else
+                echo -e "${RED}Cron template file not found.${NC}"
+            fi
+            
+            echo ""
+            read -p "Would you like to add a cron job now? (y/n): " add_cron
+            
+            if [[ "$add_cron" =~ ^[Yy]$ ]]; then
+                echo -e "\n${BLUE}Select cron schedule:${NC}"
+                echo -e "1) Hourly (0 * * * *)"
+                echo -e "2) Daily at 9 AM (0 9 * * *)"
+                echo -e "3) Every 6 hours (0 */6 * * *)"
+                echo -e "4) Weekdays at 9 AM (0 9 * * 1-5)"
+                echo -e "5) Monday and Thursday at 9 AM (0 9 * * 1,4)"
+                echo -e "6) Custom"
+                echo ""
+                read -p "Select schedule (1-6): " cron_opt
+                
+                case "$cron_opt" in
+                    1) CRON_SCHED="0 * * * *" ;;
+                    2) CRON_SCHED="0 9 * * *" ;;
+                    3) CRON_SCHED="0 */6 * * *" ;;
+                    4) CRON_SCHED="0 9 * * 1-5" ;;
+                    5) CRON_SCHED="0 9 * * 1,4" ;;
+                    6)
+                        read -p "Enter custom cron schedule: " custom_sched
+                        CRON_SCHED="$custom_sched"
+                        ;;
+                    *) 
+                        echo -e "${RED}Invalid option${NC}"
+                        return
+                        ;;
+                esac
+                
+                # Create cron entry
+                CRON_ENTRY="$CRON_SCHED $SCRIPT_DIR/serversentry.sh --periodic run >> $SCRIPT_DIR/serversentry.log 2>&1"
+                
+                # Add to crontab
+                (crontab -l 2>/dev/null || echo "") | { cat; echo "$CRON_ENTRY"; } | crontab -
+                
+                echo -e "${GREEN}Cron job has been added successfully!${NC}"
+                echo "ServerSentry periodic reports will run: $CRON_SCHED"
+            fi
+            ;;
+        7) return ;;
+        *) echo -e "${RED}Invalid option${NC}" ;;
+    esac
+    
+    # Pause before returning to the menu
+    echo ""
+    read -p "Press Enter to continue..." dummy
+    setup_periodic_reports
+}
+
+# Configure log rotation
+configure_log_rotation() {
+    clear
+    echo -e "${CYAN}┌───────────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│             Configure Log Rotation                     │${NC}"
+    echo -e "${CYAN}└───────────────────────────────────────────────────────┘${NC}"
+    
+    echo -e "\nLog rotation ensures log files don't grow too large and old logs are cleaned up."
+    echo -e "This helps prevent disk space issues and makes log management easier.\n"
+    
+    # First ensure the config file exists
+    "$SCRIPT_DIR/serversentry.sh" --logs status > /dev/null 2>&1
+    
+    echo -e "${BLUE}Current configuration:${NC}"
+    "$SCRIPT_DIR/serversentry.sh" --logs status | grep -v "No archived logs found"
+    echo ""
+    
+    # Let user select which settings to change
+    echo -e "${BLUE}What would you like to configure?${NC}"
+    echo -e "1) Maximum log file size before rotation"
+    echo -e "2) Maximum age of log files to keep"
+    echo -e "3) Maximum number of log files to keep"
+    echo -e "4) Log compression settings"
+    echo -e "5) Automatic rotation on startup"
+    echo -e "6) Set up a cron job for log rotation"
+    echo -e "7) Rotate logs now"
+    echo -e "8) Return to main menu"
+    
+    echo ""
+    read -p "Select option (1-8): " option
+    
+    case "$option" in
+        1)
+            echo -e "\n${BLUE}Set maximum log file size:${NC}"
+            echo -e "Enter the maximum size in MB before log rotation occurs."
+            echo -e "Set to 0 to disable size-based rotation."
+            echo ""
+            read -p "Enter size in MB (default: 10): " size
+            
+            if [[ "$size" =~ ^[0-9]+$ ]]; then
+                "$SCRIPT_DIR/serversentry.sh" --logs config max_size_mb "$size"
+                echo -e "${GREEN}Log rotation size updated to $size MB.${NC}"
+            else
+                echo -e "${RED}Invalid input. Please enter a number.${NC}"
+            fi
+            ;;
+        2)
+            echo -e "\n${BLUE}Set maximum log age:${NC}"
+            echo -e "Enter the maximum age in days for log files to keep."
+            echo -e "Logs older than this will be deleted during cleanup."
+            echo -e "Set to 0 to disable age-based deletion."
+            echo ""
+            read -p "Enter age in days (default: 30): " age
+            
+            if [[ "$age" =~ ^[0-9]+$ ]]; then
+                "$SCRIPT_DIR/serversentry.sh" --logs config max_age_days "$age"
+                echo -e "${GREEN}Log retention period updated to $age days.${NC}"
+            else
+                echo -e "${RED}Invalid input. Please enter a number.${NC}"
+            fi
+            ;;
+        3)
+            echo -e "\n${BLUE}Set maximum number of log files:${NC}"
+            echo -e "Enter the maximum number of archived log files to keep."
+            echo -e "When this limit is exceeded, older logs will be deleted."
+            echo -e "Set to 0 to keep all log files (not recommended)."
+            echo ""
+            read -p "Enter maximum files (default: 10): " files
+            
+            if [[ "$files" =~ ^[0-9]+$ ]]; then
+                "$SCRIPT_DIR/serversentry.sh" --logs config max_files "$files"
+                echo -e "${GREEN}Maximum log files updated to $files.${NC}"
+            else
+                echo -e "${RED}Invalid input. Please enter a number.${NC}"
+            fi
+            ;;
+        4)
+            echo -e "\n${BLUE}Log compression:${NC}"
+            echo -e "Would you like to compress rotated log files?"
+            echo -e "This saves disk space but requires gzip to be installed."
+            echo ""
+            read -p "Enable compression? (y/n): " compress
+            
+            if [[ "$compress" =~ ^[Yy]$ ]]; then
+                "$SCRIPT_DIR/serversentry.sh" --logs config compress true
+                echo -e "${GREEN}Log compression enabled.${NC}"
+            else
+                "$SCRIPT_DIR/serversentry.sh" --logs config compress false
+                echo -e "${GREEN}Log compression disabled.${NC}"
+            fi
+            ;;
+        5)
+            echo -e "\n${BLUE}Automatic rotation on startup:${NC}"
+            echo -e "Should logs be rotated every time ServerSentry starts?"
+            echo ""
+            read -p "Enable rotation on startup? (y/n): " rotate
+            
+            if [[ "$rotate" =~ ^[Yy]$ ]]; then
+                "$SCRIPT_DIR/serversentry.sh" --logs config rotate_on_start true
+                echo -e "${GREEN}Log rotation on startup enabled.${NC}"
+            else
+                "$SCRIPT_DIR/serversentry.sh" --logs config rotate_on_start false
+                echo -e "${GREEN}Log rotation on startup disabled.${NC}"
+            fi
+            ;;
+        6)
+            echo -e "\n${BLUE}Set up a cron job for log rotation:${NC}"
+            echo -e "This will add a cron job to rotate logs automatically."
+            echo ""
+            read -p "Set up daily log rotation at midnight? (y/n): " setup_cron
+            
+            if [[ "$setup_cron" =~ ^[Yy]$ ]]; then
+                # Create cron entry
+                CRON_ENTRY="0 0 * * * $SCRIPT_DIR/serversentry.sh --logs rotate >> $SCRIPT_DIR/serversentry.log 2>&1"
+                
+                # Add to crontab
+                (crontab -l 2>/dev/null || echo "") | { cat; echo "$CRON_ENTRY"; } | crontab -
+                
+                echo -e "${GREEN}Cron job has been added successfully!${NC}"
+                echo "ServerSentry logs will be rotated daily at midnight."
+            fi
+            ;;
+        7)
+            echo -e "\n${BLUE}Rotating logs now...${NC}"
+            "$SCRIPT_DIR/serversentry.sh" --logs rotate
+            ;;
+        8) return ;;
+        *) echo -e "${RED}Invalid option${NC}" ;;
+    esac
+    
+    # Pause before returning to the menu
+    echo ""
+    read -p "Press Enter to continue..." dummy
+    configure_log_rotation
+}
+
 # Main menu for update case
 update_menu() {
     while true; do
@@ -462,11 +844,17 @@ update_menu() {
         echo -e "  ${GREEN}7)${NC} 🧪 ${CYAN}Run System Check${NC}"
         echo -e "     ↳ Perform a one-time system check now"
         
-        echo -e "  ${GREEN}8)${NC} 🚪 ${CYAN}Exit${NC}"
+        echo -e "  ${GREEN}8)${NC} 📩 ${CYAN}Configure Periodic Reports${NC}"
+        echo -e "     ↳ Set up automatic system reports via webhooks"
+        
+        echo -e "  ${GREEN}9)${NC} 🔄 ${CYAN}Configure Log Rotation${NC}"
+        echo -e "     ↳ Manage log file rotation and cleanup"
+        
+        echo -e "  ${GREEN}10)${NC} 🚪 ${CYAN}Exit${NC}"
         echo -e "     ↳ Close this management interface"
         
         echo ""
-        read -p "Enter your choice (1-8): " option
+        read -p "Enter your choice (1-10): " option
         
         case "$option" in
             1) update_serversentry ;;
@@ -500,9 +888,11 @@ update_menu() {
                 echo ""
                 read -p "Press Enter to continue..." dummy
                 ;;
-            8) exit 0 ;;
+            8) setup_periodic_reports ;;
+            9) configure_log_rotation ;;
+            10) exit 0 ;;
             *) 
-                echo -e "${RED}Invalid option. Please select 1-8.${NC}" 
+                echo -e "${RED}Invalid option. Please select 1-10.${NC}" 
                 sleep 2
                 ;;
         esac
