@@ -1,0 +1,97 @@
+# ServerSentry .gitignore
+# Comprehensive exclusion patterns for the ServerSentry monitoring tool
+
+#-------------------------------------------------
+# Log files
+#-------------------------------------------------
+*.log
+serversentry.log
+sysmon.log
+logs/
+*/logs/
+
+#-------------------------------------------------
+# Configuration with sensitive data
+#-------------------------------------------------
+# Webhook configurations contain sensitive URLs
+config/webhooks.conf
+# Backup of configuration files
+config/*.bak
+# User-specific thresholds
+config/user-*.conf
+
+#-------------------------------------------------
+# Runtime data and temporary files
+#-------------------------------------------------
+*.pid
+*.tmp
+*.temp
+.serversentryrc
+.env
+.env.*
+!.env.example
+
+#-------------------------------------------------
+# OS specific files
+#-------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+#-------------------------------------------------
+# Editor and IDE files
+#-------------------------------------------------
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim
+*.swp
+*.swo
+.*.sw?
+
+#-------------------------------------------------
+# Development and testing
+#-------------------------------------------------
+/test/
+/tests/
+/testing/
+/temp/
+/tmp/
+
+#-------------------------------------------------
+# Distribution and packaging
+#-------------------------------------------------
+*.zip
+*.tar.gz
+*.tgz
+dist/
+build/
+
+#-------------------------------------------------
+# Miscellaneous
+#-------------------------------------------------
+# Backup files
+*.bak
+*.backup
+*-old 

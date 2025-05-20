@@ -5,7 +5,7 @@
 # Get the root script directory (one level up from lib)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 SCRIPT_DIR="$(dirname "$SCRIPT_DIR")"
-LOG_FILE="$SCRIPT_DIR/sysmon.log"
+LOG_FILE="$SCRIPT_DIR/serversentry.log"
 
 # Logging function (robust)
 log_message() {

@@ -379,35 +379,94 @@ update_serversentry() {
 
 # Print usage information
 print_usage() {
+    clear
     echo ""
-    echo -e "${CYAN}Usage Information${NC}"
-    echo "================="
-    echo "To use ServerSentry, run:"
-    echo "  $SCRIPT_DIR/serversentry.sh --help"
-    echo ""
-    echo "Common Commands:"
-    echo "  $SCRIPT_DIR/serversentry.sh --check"
-    echo "  $SCRIPT_DIR/serversentry.sh --monitor"
-    echo "  $SCRIPT_DIR/serversentry.sh --test-webhook"
-    echo "  $SCRIPT_DIR/serversentry.sh --add-webhook URL"
-    echo ""
+    echo -e "${CYAN}┌───────────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│             ServerSentry Usage Guide                  │${NC}"
+    echo -e "${CYAN}└───────────────────────────────────────────────────────┘${NC}"
+    
+    echo -e "\n${BLUE}🔍 BASIC COMMANDS${NC}\n"
+    echo -e "  ${GREEN}serversentry --help${NC}"
+    echo -e "    ↳ Display comprehensive help information\n"
+    
+    echo -e "  ${GREEN}serversentry --check${NC}"
+    echo -e "    ↳ Run a one-time system check and display results\n"
+    
+    echo -e "  ${GREEN}serversentry --monitor${NC}"
+    echo -e "    ↳ Start continuous monitoring in foreground mode\n"
+    
+    echo -e "  ${GREEN}serversentry --status${NC}"
+    echo -e "    ↳ Show current system status and metrics\n"
+    
+    echo -e "\n${BLUE}🔔 NOTIFICATION MANAGEMENT${NC}\n"
+    echo -e "  ${GREEN}serversentry --test-webhook${NC}"
+    echo -e "    ↳ Test notifications to all configured webhooks\n"
+    
+    echo -e "  ${GREEN}serversentry --add-webhook URL${NC}"
+    echo -e "    ↳ Add a new webhook notification endpoint\n"
+    
+    echo -e "  ${GREEN}serversentry --remove-webhook N${NC}"
+    echo -e "    ↳ Remove webhook number N from configuration\n"
+    
+    echo -e "\n${BLUE}⚙️ CONFIGURATION${NC}\n"
+    echo -e "  ${GREEN}serversentry --update NAME=VALUE${NC}"
+    echo -e "    ↳ Update configuration threshold (e.g., cpu_threshold=90)\n"
+    
+    echo -e "  ${GREEN}serversentry --list${NC}"
+    echo -e "    ↳ List all configured thresholds and webhooks\n"
+    
+    echo -e "\n${YELLOW}TIP:${NC} Create an alias for easier access:"
+    echo -e "  ${GREEN}alias serversentry=\"$SCRIPT_DIR/serversentry.sh\"${NC}"
+    
+    echo -e "\n${BLUE}📖 DOCUMENTATION${NC}"
+    echo -e "  For Microsoft Teams integration, see:"
+    echo -e "  ${GREEN}cat TEAMS_SETUP.md${NC}\n"
+    
+    read -p "Press Enter to continue..." dummy
 }
 
 # Main menu for update case
 update_menu() {
     while true; do
-        echo ""
-        echo -e "${CYAN}ServerSentry Management${NC}"
-        echo "======================="
-        echo -e "1) Update ServerSentry      ${YELLOW}• Update and maintain core monitoring components${NC}"
-        echo -e "2) Manage cron jobs         ${YELLOW}• Schedule automatic system checks and alerts${NC}"
-        echo -e "3) View current configuration${YELLOW}• See thresholds, webhooks, and scheduled tasks${NC}"
-        echo -e "4) Reset configuration files ${YELLOW}• Restore default settings (thresholds, webhooks)${NC}"
-        echo -e "5) Show usage information   ${YELLOW}• Display available commands and examples${NC}"
-        echo -e "6) Exit                     ${YELLOW}• Close this management interface${NC}"
+        clear
+        
+        # Header without system info
+        echo -e "${CYAN}┌───────────────────────────────────────────────────────┐${NC}"
+        echo -e "${CYAN}│             ServerSentry Management                   │${NC}"
+        echo -e "${CYAN}└───────────────────────────────────────────────────────┘${NC}"
+        
+        # Version info
+        current_version=$(grep -m 1 "Version:" "$SCRIPT_DIR/serversentry.sh" | awk '{print $3}' 2>/dev/null || echo "Unknown")
+        echo -e "\nServerSentry Version: ${GREEN}$current_version${NC}\n"
+        
+        # Menu options with icons and better formatting
+        echo -e "${BLUE}Select an option:${NC}"
+        echo -e "  ${GREEN}1)${NC} 🔄 ${CYAN}Update ServerSentry${NC}"
+        echo -e "     ↳ Update and maintain core monitoring components"
+        
+        echo -e "  ${GREEN}2)${NC} ⏱️  ${CYAN}Manage Scheduled Tasks${NC}"
+        echo -e "     ↳ Configure automated monitoring checks and alerts"
+        
+        echo -e "  ${GREEN}3)${NC} 👁️  ${CYAN}View Configuration${NC}"
+        echo -e "     ↳ Inspect current thresholds, webhooks, and scheduled tasks"
+        
+        echo -e "  ${GREEN}4)${NC} 🔧 ${CYAN}Reset Configuration${NC}"
+        echo -e "     ↳ Restore default settings for thresholds and webhooks"
+        
+        echo -e "  ${GREEN}5)${NC} 📚 ${CYAN}Usage Guide${NC}"
+        echo -e "     ↳ Display available commands and usage examples"
+        
+        echo -e "  ${GREEN}6)${NC} 📋 ${CYAN}View Logs${NC}" 
+        echo -e "     ↳ Check recent monitoring logs and activity"
+        
+        echo -e "  ${GREEN}7)${NC} 🧪 ${CYAN}Run System Check${NC}"
+        echo -e "     ↳ Perform a one-time system check now"
+        
+        echo -e "  ${GREEN}8)${NC} 🚪 ${CYAN}Exit${NC}"
+        echo -e "     ↳ Close this management interface"
         
         echo ""
-        read -p "Select option (1-6): " option
+        read -p "Enter your choice (1-8): " option
         
         case "$option" in
             1) update_serversentry ;;
@@ -421,11 +480,31 @@ update_menu() {
                     rm -f "$SCRIPT_DIR/config/webhooks.conf"
                     create_config_files
                     echo -e "${GREEN}Configuration files have been reset.${NC}"
+                    sleep 2
                 fi
                 ;;
             5) print_usage ;;
-            6) exit 0 ;;
-            *) echo -e "${RED}Invalid option${NC}" ;;
+            6) 
+                echo -e "\n${CYAN}Recent Log Entries:${NC}"
+                if [ -f "$SCRIPT_DIR/serversentry.log" ]; then
+                    tail -n 20 "$SCRIPT_DIR/serversentry.log"
+                else
+                    echo -e "${YELLOW}No log file found at $SCRIPT_DIR/serversentry.log${NC}"
+                fi
+                echo ""
+                read -p "Press Enter to continue..." dummy
+                ;;
+            7)
+                echo -e "\n${CYAN}Running system check...${NC}\n"
+                "$SCRIPT_DIR/serversentry.sh" --check
+                echo ""
+                read -p "Press Enter to continue..." dummy
+                ;;
+            8) exit 0 ;;
+            *) 
+                echo -e "${RED}Invalid option. Please select 1-8.${NC}" 
+                sleep 2
+                ;;
         esac
     done
 }

@@ -20,7 +20,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Global configuration files
-LOG_FILE="$SCRIPT_DIR/sysmon.log"
+LOG_FILE="$SCRIPT_DIR/serversentry.log"
 CONFIG_DIR="$SCRIPT_DIR/config"
 THRESHOLDS_FILE="$CONFIG_DIR/thresholds.conf"
 WEBHOOKS_FILE="$CONFIG_DIR/webhooks.conf"
