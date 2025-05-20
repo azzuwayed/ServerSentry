@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# SysMon - Configuration Management
+# ServerSentry - Configuration Management
 
 # Define the configuration directories and files
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"

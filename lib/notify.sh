@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# SysMon - Notification functionality
+# ServerSentry - Notification functionality
 
 # Source dependencies if not already sourced
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -38,7 +38,7 @@ format_webhook_payload() {
         "message": "'"${message//\"/\\\"}"'",
         "hostname": "'"$hostname"'",
         "timestamp": "'"$timestamp"'",
-        "source": "SysMon"
+        "source": "ServerSentry"
     }'
     
     # Format the payload according to the provider

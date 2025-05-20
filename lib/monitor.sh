@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# SysMon - Monitoring functionality
+# ServerSentry - Monitoring functionality
 
 # Source dependencies if not already sourced
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"

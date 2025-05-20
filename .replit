@@ -20,6 +20,10 @@ args = "SysMonWorkflow"
 task = "workflow.run"
 args = "bash_tool"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "ServerSentry"
+
 [[workflows.workflow]]
 name = "SysMonWorkflow"
 author = "agent"
@@ -35,6 +39,14 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "./install.sh && chmod +x sysmon.sh && ./sysmon.sh --check"
+
+[[workflows.workflow]]
+name = "ServerSentry"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "chmod +x serversentry.sh lib/*.sh install.sh && ./serversentry.sh --help"
 
 [deployment]
 run = ["sh", "-c", "chmod +x sysmon.sh lib/*.sh install.sh && ./sysmon.sh --help"]
