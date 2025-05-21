@@ -5,7 +5,7 @@
 #
 # This tool monitors system resources (CPU, memory, disk) and sends
 # webhook notifications when thresholds are exceeded.
-# 
+#
 # Features:
 # - Cross-environment compatibility
 # - Robust monitoring functions
@@ -17,7 +17,7 @@
 # License: MIT
 
 # Get the directory where the script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
 # Global configuration files
 LOG_FILE="$SCRIPT_DIR/serversentry.log"
@@ -44,12 +44,12 @@ if [ ! -d "$SCRIPT_DIR/lib" ]; then
 fi
 
 # Source the modular library files
-if [ ! -f "$SCRIPT_DIR/lib/utils.sh" ] || 
-   [ ! -f "$SCRIPT_DIR/lib/config.sh" ] || 
-   [ ! -f "$SCRIPT_DIR/lib/monitor.sh" ] || 
-   [ ! -f "$SCRIPT_DIR/lib/notify.sh" ]; then
+if [ ! -f "$SCRIPT_DIR/lib/utils.sh" ] ||
+    [ ! -f "$SCRIPT_DIR/lib/config.sh" ] ||
+    [ ! -f "$SCRIPT_DIR/lib/monitor.sh" ] ||
+    [ ! -f "$SCRIPT_DIR/lib/notify/main.sh" ]; then
     echo "Error: Required library files not found. Please reinstall the application."
-    echo "Missing one or more of: utils.sh, config.sh, monitor.sh, notify.sh"
+    echo "Missing one or more of: utils.sh, config.sh, monitor.sh, notify/main.sh"
     exit 1
 fi
 
@@ -57,7 +57,7 @@ fi
 source "$SCRIPT_DIR/lib/utils.sh"
 source "$SCRIPT_DIR/lib/config.sh"
 source "$SCRIPT_DIR/lib/monitor.sh"
-source "$SCRIPT_DIR/lib/notify.sh"
+source "$SCRIPT_DIR/lib/notify/main.sh"
 source "$SCRIPT_DIR/lib/periodic.sh"
 source "$SCRIPT_DIR/lib/logrotate.sh"
 
@@ -107,38 +107,38 @@ show_help() {
 
 run_check() {
     log_message "INFO" "Running one-time system check"
-    
+
     # Load config
     load_thresholds
     load_webhooks
-    
+
     # Define color codes for terminal output
     RED='\033[0;31m'
     YELLOW='\033[0;33m'
     GREEN='\033[0;32m'
     CYAN='\033[0;36m'
     NC='\033[0m' # No Color
-    
+
     # Function to create a visual progress bar
     create_visual_bar() {
         local usage=$1
         local threshold=$2
         local width=20
-        local filled=$(( usage * width / 100 ))
+        local filled=$((usage * width / 100))
         local bar="["
-        
-        for ((i=0; i<width; i++)); do
+
+        for ((i = 0; i < width; i++)); do
             if [ $i -lt $filled ]; then
                 bar+="#"
             else
                 bar+="-"
             fi
         done
-        
+
         bar+="] $usage%"
         echo "$bar"
     }
-    
+
     # Function to add color based on threshold
     colorize_metric() {
         local value=$1
@@ -146,7 +146,7 @@ run_check() {
         local warn_threshold=$((threshold - 20))
         local text=$3
         local bar=$(create_visual_bar "$value" "$threshold")
-        
+
         if [ "$value" -ge "$threshold" ]; then
             echo -e "${RED}$text ${bar} ${RED}⚠️  ALERT: Above threshold ($threshold%)${NC}"
         elif [ "$value" -ge "$warn_threshold" ]; then
@@ -155,35 +155,35 @@ run_check() {
             echo -e "${GREEN}$text ${bar} ${GREEN}✅ NORMAL${NC}"
         fi
     }
-    
+
     # Get and display current resource usage with visual indicators
     local cpu_usage=$(get_cpu_usage)
     colorize_metric "$cpu_usage" "${CPU_THRESHOLD}" "🖥️  CPU usage:"
-    
+
     local memory_usage=$(get_memory_usage)
     colorize_metric "$memory_usage" "${MEMORY_THRESHOLD}" "🧠 Memory usage:"
-    
+
     local disk_usage=$(get_disk_usage)
     colorize_metric "$disk_usage" "${DISK_THRESHOLD}" "💾 Disk usage:"
-    
+
     echo -e "\n${CYAN}=== System Information ===${NC}"
     echo -e "${CYAN}Hostname:${NC} $(hostname)"
     echo -e "${CYAN}OS:${NC} $(uname -a)"
     echo -e "${CYAN}Uptime:${NC} $(uptime)"
-    
+
     # Run threshold checks and show details when thresholds are exceeded
     if [ "${cpu_usage:-0}" -ge "${CPU_THRESHOLD:-80}" ] 2>/dev/null; then
         echo -e "\n${RED}⚠️ CPU ALERT: Usage exceeded threshold: $cpu_usage% >= $CPU_THRESHOLD%${NC}"
         echo -e "${CYAN}Top CPU consumers:${NC}"
         get_top_cpu_processes 5
     fi
-    
+
     if [ "${memory_usage:-0}" -ge "${MEMORY_THRESHOLD:-80}" ] 2>/dev/null; then
         echo -e "\n${RED}⚠️ MEMORY ALERT: Usage exceeded threshold: $memory_usage% >= $MEMORY_THRESHOLD%${NC}"
         echo -e "${CYAN}Top memory consumers:${NC}"
         get_top_memory_processes 5
     fi
-    
+
     if [ "${disk_usage:-0}" -ge "${DISK_THRESHOLD:-85}" ] 2>/dev/null; then
         echo -e "\n${RED}⚠️ DISK ALERT: Usage exceeded threshold: $disk_usage% >= $DISK_THRESHOLD%${NC}"
         echo -e "${CYAN}Largest directories:${NC}"
@@ -191,15 +191,15 @@ run_check() {
             du -h /var /tmp /Users 2>/dev/null | sort -hr | head -n 5
         fi
     fi
-    
+
     # Check monitored processes
     if [ -n "$PROCESS_CHECKS" ]; then
         echo "Process checks:"
-        IFS=',' read -ra PROCESSES <<< "$PROCESS_CHECKS"
+        IFS=',' read -ra PROCESSES <<<"$PROCESS_CHECKS"
         for process in "${PROCESSES[@]}"; do
             process=$(echo "$process" | xargs)
             if [ -z "$process" ]; then continue; fi
-            
+
             if check_process_running "$process"; then
                 echo "  ✓ $process is running"
             else
@@ -207,29 +207,29 @@ run_check() {
             fi
         done
     fi
-    
+
     log_message "INFO" "One-time check completed"
 }
 
 start_monitor() {
     log_message "INFO" "Starting system monitoring in foreground"
-    
+
     # Load config
     load_thresholds
     load_webhooks
-    
+
     # Print current configuration
     print_config
-    
+
     echo "Press Ctrl+C to stop monitoring..."
-    
+
     # Continuous monitoring loop
     while true; do
         check_cpu
         check_memory
         check_disk
         check_processes
-        
+
         # Sleep for the configured interval
         sleep "$CHECK_INTERVAL"
     done
@@ -237,41 +237,41 @@ start_monitor() {
 
 show_status() {
     log_message "INFO" "Showing current system status"
-    
+
     # Load config
     load_thresholds
     load_webhooks
-    
+
     # Print current configuration
     print_config
-    
+
     # Show current resource usage
     local cpu_usage=$(get_cpu_usage)
     echo "Current CPU usage: $cpu_usage%"
-    
+
     local memory_usage=$(get_memory_usage)
     echo "Current memory usage: $memory_usage%"
-    
+
     local disk_usage=$(get_disk_usage)
     echo "Current disk usage: $disk_usage%"
 }
 
 test_webhook() {
     log_message "INFO" "Testing webhook notifications"
-    
+
     # Load webhooks
     load_webhooks
-    
+
     if [ ${#WEBHOOKS[@]} -eq 0 ]; then
         echo "Error: No webhooks configured. Add one with --add-webhook"
         exit 1
     fi
-    
+
     # Get current system stats for a more useful test
     local cpu_usage=$(get_cpu_usage)
     local memory_usage=$(get_memory_usage)
     local disk_usage=$(get_disk_usage)
-    
+
     # Create comprehensive test message with color formatting
     local test_message="ServerSentry test notification with current status overview:
 
@@ -283,24 +283,24 @@ Disk Usage: ${disk_usage}%
 This is a test alert to verify proper webhook configuration and Teams integration. The notification includes comprehensive system information and is formatted for optimal display in Microsoft Teams.
 
 For more information on configuring Teams with ServerSentry, see the TEAMS_SETUP.md guide."
-    
+
     # Show what we're sending
     echo "Sending test alert to all configured webhooks..."
     echo "Current system stats:"
     echo "- CPU: ${cpu_usage}%"
     echo "- Memory: ${memory_usage}%"
     echo "- Disk: ${disk_usage}%"
-    
+
     # Test each webhook
     for i in "${!WEBHOOKS[@]}"; do
         echo "Testing webhook #$i: ${WEBHOOKS[$i]}"
         echo "Sending detailed system information and adaptive card..."
         send_webhook_notification "${WEBHOOKS[$i]}" "ServerSentry System Test" "$test_message"
-        
+
         # Brief delay to avoid throttling
         sleep 1
     done
-    
+
     echo "Test complete. Please check your notification channels."
     echo "If using Microsoft Teams, you should see an adaptive card with detailed system information."
 }
@@ -314,143 +314,143 @@ fi
 # Process command line arguments
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help)
-            show_help
-            exit 0
+    -h | --help)
+        show_help
+        exit 0
+        ;;
+    -c | --check)
+        run_check
+        exit 0
+        ;;
+    -m | --monitor)
+        start_monitor
+        exit 0
+        ;;
+    -s | --status)
+        show_status
+        exit 0
+        ;;
+    -t | --test-webhook)
+        test_webhook
+        exit 0
+        ;;
+    -a | --add-webhook)
+        if [ -z "$2" ]; then
+            echo "Error: Webhook URL is required"
+            exit 1
+        fi
+        add_webhook "$2"
+        echo "Webhook added: $2"
+        shift
+        ;;
+    -r | --remove-webhook)
+        if [ -z "$2" ]; then
+            echo "Error: Webhook index is required"
+            exit 1
+        fi
+        remove_webhook "$2"
+        echo "Webhook #$2 removed"
+        shift
+        ;;
+    -u | --update)
+        if [ -z "$2" ]; then
+            echo "Error: Threshold value is required (e.g., cpu_threshold=85)"
+            exit 1
+        fi
+        THRESHOLD_NAME=$(echo "$2" | cut -d= -f1)
+        THRESHOLD_VALUE=$(echo "$2" | cut -d= -f2)
+        update_threshold "$THRESHOLD_NAME" "$THRESHOLD_VALUE"
+        echo "Updated $THRESHOLD_NAME to $THRESHOLD_VALUE"
+        shift
+        ;;
+    -l | --list)
+        load_thresholds
+        load_webhooks
+        print_config
+        exit 0
+        ;;
+    --periodic)
+        if [ -z "$2" ]; then
+            echo "Error: Periodic command is required (run, status, config)"
+            exit 1
+        fi
+
+        case "$2" in
+        run)
+            periodic_main run
+            exit $?
             ;;
-        -c|--check)
-            run_check
-            exit 0
+
+        status)
+            periodic_main status
+            exit $?
             ;;
-        -m|--monitor)
-            start_monitor
-            exit 0
-            ;;
-        -s|--status)
-            show_status
-            exit 0
-            ;;
-        -t|--test-webhook)
-            test_webhook
-            exit 0
-            ;;
-        -a|--add-webhook)
-            if [ -z "$2" ]; then
-                echo "Error: Webhook URL is required"
+
+        config)
+            if [ -z "$3" ] || [ -z "$4" ]; then
+                echo "Error: Parameter name and value required"
+                echo "Usage: $0 --periodic config <parameter> <value>"
+                echo "Parameters: report_interval, report_level, report_checks, force_report, report_time, report_days"
                 exit 1
             fi
-            add_webhook "$2"
-            echo "Webhook added: $2"
-            shift
+            periodic_main config "$3" "$4"
+            exit $?
             ;;
-        -r|--remove-webhook)
-            if [ -z "$2" ]; then
-                echo "Error: Webhook index is required"
-                exit 1
-            fi
-            remove_webhook "$2"
-            echo "Webhook #$2 removed"
-            shift
-            ;;
-        -u|--update)
-            if [ -z "$2" ]; then
-                echo "Error: Threshold value is required (e.g., cpu_threshold=85)"
-                exit 1
-            fi
-            THRESHOLD_NAME=$(echo "$2" | cut -d= -f1)
-            THRESHOLD_VALUE=$(echo "$2" | cut -d= -f2)
-            update_threshold "$THRESHOLD_NAME" "$THRESHOLD_VALUE"
-            echo "Updated $THRESHOLD_NAME to $THRESHOLD_VALUE"
-            shift
-            ;;
-        -l|--list)
-            load_thresholds
-            load_webhooks
-            print_config
-            exit 0
-            ;;
-        --periodic)
-            if [ -z "$2" ]; then
-                echo "Error: Periodic command is required (run, status, config)"
-                exit 1
-            fi
-            
-            case "$2" in
-                run)
-                    periodic_main run
-                    exit $?
-                    ;;
-                    
-                status)
-                    periodic_main status
-                    exit $?
-                    ;;
-                    
-                config)
-                    if [ -z "$3" ] || [ -z "$4" ]; then
-                        echo "Error: Parameter name and value required"
-                        echo "Usage: $0 --periodic config <parameter> <value>"
-                        echo "Parameters: report_interval, report_level, report_checks, force_report, report_time, report_days"
-                        exit 1
-                    fi
-                    periodic_main config "$3" "$4"
-                    exit $?
-                    ;;
-                    
-                *)
-                    echo "Unknown periodic command: $2"
-                    echo "Available commands: run, status, config"
-                    exit 1
-                    ;;
-            esac
-            shift 2
-            ;;
-        --logs)
-            if [ -z "$2" ]; then
-                echo "Error: Log command is required (status, rotate, clean, config)"
-                exit 1
-            fi
-            
-            case "$2" in
-                status)
-                    logrotate_main status
-                    exit $?
-                    ;;
-                    
-                rotate)
-                    logrotate_main rotate
-                    exit $?
-                    ;;
-                    
-                clean)
-                    logrotate_main clean
-                    exit $?
-                    ;;
-                    
-                config)
-                    if [ -z "$3" ] || [ -z "$4" ]; then
-                        echo "Error: Parameter name and value required"
-                        echo "Usage: $0 --logs config <parameter> <value>"
-                        echo "Parameters: max_size_mb, max_age_days, max_files, compress, rotate_on_start"
-                        exit 1
-                    fi
-                    logrotate_main config "$3" "$4"
-                    exit $?
-                    ;;
-                    
-                *)
-                    echo "Unknown log command: $2"
-                    echo "Available commands: status, rotate, clean, config"
-                    exit 1
-                    ;;
-            esac
-            shift 2
-            ;;
+
         *)
-            echo "Unknown option: $1"
-            show_help
+            echo "Unknown periodic command: $2"
+            echo "Available commands: run, status, config"
             exit 1
             ;;
+        esac
+        shift 2
+        ;;
+    --logs)
+        if [ -z "$2" ]; then
+            echo "Error: Log command is required (status, rotate, clean, config)"
+            exit 1
+        fi
+
+        case "$2" in
+        status)
+            logrotate_main status
+            exit $?
+            ;;
+
+        rotate)
+            logrotate_main rotate
+            exit $?
+            ;;
+
+        clean)
+            logrotate_main clean
+            exit $?
+            ;;
+
+        config)
+            if [ -z "$3" ] || [ -z "$4" ]; then
+                echo "Error: Parameter name and value required"
+                echo "Usage: $0 --logs config <parameter> <value>"
+                echo "Parameters: max_size_mb, max_age_days, max_files, compress, rotate_on_start"
+                exit 1
+            fi
+            logrotate_main config "$3" "$4"
+            exit $?
+            ;;
+
+        *)
+            echo "Unknown log command: $2"
+            echo "Available commands: status, rotate, clean, config"
+            exit 1
+            ;;
+        esac
+        shift 2
+        ;;
+    *)
+        echo "Unknown option: $1"
+        show_help
+        exit 1
+        ;;
     esac
     shift
 done

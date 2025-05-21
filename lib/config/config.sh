@@ -3,7 +3,7 @@
 # ServerSentry - Configuration Management (merged and improved)
 
 # Get the root script directory (one level up from lib)
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 SCRIPT_DIR="$(dirname "$SCRIPT_DIR")"
 CONFIG_DIR="$SCRIPT_DIR/config"
 THRESHOLDS_FILE="$CONFIG_DIR/thresholds.conf"
@@ -19,7 +19,7 @@ CPU_THRESHOLD=80
 MEMORY_THRESHOLD=80
 DISK_THRESHOLD=85
 LOAD_THRESHOLD=2.0
-CHECK_INTERVAL=60  # seconds
+CHECK_INTERVAL=60 # seconds
 PROCESS_CHECKS="" # Format: "process_name1,process_name2"
 
 # Webhooks array
@@ -32,10 +32,10 @@ init_config() {
         log_message "ERROR" "Failed to create configuration directory"
         return 1
     fi
-    
+
     # Create thresholds file if it doesn't exist
     if [ ! -f "$THRESHOLDS_FILE" ]; then
-        cat > "$THRESHOLDS_FILE" <<EOF
+        cat >"$THRESHOLDS_FILE" <<EOF
 # SysMon Thresholds Configuration
 # Values are in percentage except for load and interval
 cpu_threshold=$CPU_THRESHOLD
@@ -47,14 +47,14 @@ process_checks=$PROCESS_CHECKS
 EOF
         log_message "INFO" "Created default thresholds configuration file"
     fi
-    
+
     # Create webhooks file if it doesn't exist
     if [ ! -f "$WEBHOOKS_FILE" ]; then
-        echo "# SysMon Webhooks Configuration" > "$WEBHOOKS_FILE"
-        echo "# Add one webhook URL per line" >> "$WEBHOOKS_FILE"
+        echo "# SysMon Webhooks Configuration" >"$WEBHOOKS_FILE"
+        echo "# Add one webhook URL per line" >>"$WEBHOOKS_FILE"
         log_message "INFO" "Created webhooks configuration file"
     fi
-    
+
     return 0
 }
 
@@ -63,39 +63,39 @@ load_thresholds() {
     if [ ! -f "$THRESHOLDS_FILE" ]; then
         init_config
     fi
-    
+
     # Read thresholds from file
     while IFS='=' read -r key value; do
         # Skip comments and empty lines
         [[ $key == \#* ]] && continue
         [[ -z $key ]] && continue
-        
+
         # Trim whitespace
         key=$(echo "$key" | xargs)
         value=$(echo "$value" | xargs)
-        
+
         case "$key" in
-            cpu_threshold)
-                CPU_THRESHOLD="$value"
-                ;;
-            memory_threshold)
-                MEMORY_THRESHOLD="$value"
-                ;;
-            disk_threshold)
-                DISK_THRESHOLD="$value"
-                ;;
-            load_threshold)
-                LOAD_THRESHOLD="$value"
-                ;;
-            check_interval)
-                CHECK_INTERVAL="$value"
-                ;;
-            process_checks)
-                PROCESS_CHECKS="$value"
-                ;;
+        cpu_threshold)
+            CPU_THRESHOLD="$value"
+            ;;
+        memory_threshold)
+            MEMORY_THRESHOLD="$value"
+            ;;
+        disk_threshold)
+            DISK_THRESHOLD="$value"
+            ;;
+        load_threshold)
+            LOAD_THRESHOLD="$value"
+            ;;
+        check_interval)
+            CHECK_INTERVAL="$value"
+            ;;
+        process_checks)
+            PROCESS_CHECKS="$value"
+            ;;
         esac
-    done < "$THRESHOLDS_FILE"
-    
+    done <"$THRESHOLDS_FILE"
+
     log_message "INFO" "Loaded thresholds configuration"
 }
 
@@ -104,21 +104,21 @@ load_webhooks() {
     if [ ! -f "$WEBHOOKS_FILE" ]; then
         init_config
     fi
-    
+
     # Clear the existing webhooks array
     WEBHOOKS=()
-    
+
     # Read webhooks from file
     while IFS= read -r line; do
         # Skip comments and empty lines
         [[ $line == \#* ]] && continue
         [[ -z $line ]] && continue
-        
+
         # Trim whitespace and add to array
         line=$(echo "$line" | xargs)
         WEBHOOKS+=("$line")
-    done < "$WEBHOOKS_FILE"
-    
+    done <"$WEBHOOKS_FILE"
+
     log_message "INFO" "Loaded ${#WEBHOOKS[@]} webhook(s)"
 }
 
@@ -126,18 +126,18 @@ load_webhooks() {
 update_threshold() {
     local name="$1"
     local value="$2"
-    
+
     # Validate the threshold name
     case "$name" in
-        cpu_threshold|memory_threshold|disk_threshold|load_threshold|check_interval|process_checks)
-            # Valid threshold name
-            ;;
-        *)
-            log_message "ERROR" "Invalid threshold name: $name"
-            return 1
-            ;;
+    cpu_threshold | memory_threshold | disk_threshold | load_threshold | check_interval | process_checks)
+        # Valid threshold name
+        ;;
+    *)
+        log_message "ERROR" "Invalid threshold name: $name"
+        return 1
+        ;;
     esac
-    
+
     # Validate the value (except for process_checks)
     if [ "$name" != "process_checks" ]; then
         if ! is_number "$value"; then
@@ -145,7 +145,7 @@ update_threshold() {
             return 1
         fi
     fi
-    
+
     # Update the configuration file
     if [ -f "$THRESHOLDS_FILE" ]; then
         # Check if the threshold already exists in the file
@@ -158,31 +158,31 @@ update_threshold() {
             fi
         else
             # Add new threshold
-            echo "$name=$value" >> "$THRESHOLDS_FILE"
+            echo "$name=$value" >>"$THRESHOLDS_FILE"
         fi
-        
+
         # Update the global variable
         case "$name" in
-            cpu_threshold)
-                CPU_THRESHOLD="$value"
-                ;;
-            memory_threshold)
-                MEMORY_THRESHOLD="$value"
-                ;;
-            disk_threshold)
-                DISK_THRESHOLD="$value"
-                ;;
-            load_threshold)
-                LOAD_THRESHOLD="$value"
-                ;;
-            check_interval)
-                CHECK_INTERVAL="$value"
-                ;;
-            process_checks)
-                PROCESS_CHECKS="$value"
-                ;;
+        cpu_threshold)
+            CPU_THRESHOLD="$value"
+            ;;
+        memory_threshold)
+            MEMORY_THRESHOLD="$value"
+            ;;
+        disk_threshold)
+            DISK_THRESHOLD="$value"
+            ;;
+        load_threshold)
+            LOAD_THRESHOLD="$value"
+            ;;
+        check_interval)
+            CHECK_INTERVAL="$value"
+            ;;
+        process_checks)
+            PROCESS_CHECKS="$value"
+            ;;
         esac
-        
+
         log_message "INFO" "Updated threshold: $name=$value"
         return 0
     else
@@ -196,7 +196,7 @@ add_webhook() {
     local url="$1"
     # Remove any escaping from the URL before storing
     url=$(echo "$url" | sed 's/\\//g')
-    
+
     if ! is_valid_url "$url"; then
         log_message "ERROR" "Invalid webhook URL: $url"
         echo "[ERROR] Invalid webhook URL: $url"
@@ -210,13 +210,13 @@ add_webhook() {
             return 0
         fi
     done
-    echo "$url" >> "$WEBHOOKS_FILE"
+    echo "$url" >>"$WEBHOOKS_FILE"
     WEBHOOKS+=("$url")
     log_message "INFO" "Added webhook: $url"
     echo "Webhook added: $url"
     # Immediately send a test notification
     if [[ "$(type -t send_webhook_notification)" != "function" ]]; then
-        source "$SCRIPT_DIR/lib/notify.sh"
+        source "$SCRIPT_DIR/lib/notify/main.sh"
     fi
     echo "Testing webhook..."
     send_webhook_notification "$url" "Test" "This is a test notification from ServerSentry (add_webhook)."
@@ -232,36 +232,36 @@ add_webhook() {
 # Remove a webhook endpoint by index
 remove_webhook() {
     local index="$1"
-    
+
     # Validate the index
     if ! [[ "$index" =~ ^[0-9]+$ ]]; then
         log_message "ERROR" "Invalid webhook index: $index"
         return 1
     fi
-    
+
     # Load existing webhooks
     load_webhooks
-    
+
     # Check if the index is valid
     if [ "$index" -ge "${#WEBHOOKS[@]}" ]; then
         log_message "ERROR" "Webhook index out of range: $index"
         return 1
     fi
-    
+
     # Remove the webhook from the array
     local removed_webhook="${WEBHOOKS[$index]}"
     unset 'WEBHOOKS[$index]'
-    
+
     # Rebuild the webhooks file
-    echo "# SysMon Webhooks Configuration" > "$WEBHOOKS_FILE"
-    echo "# Add one webhook URL per line" >> "$WEBHOOKS_FILE"
-    
+    echo "# SysMon Webhooks Configuration" >"$WEBHOOKS_FILE"
+    echo "# Add one webhook URL per line" >>"$WEBHOOKS_FILE"
+
     for webhook in "${WEBHOOKS[@]}"; do
-        if [ -n "$webhook" ]; then  # Only add non-empty webhooks
-            echo "$webhook" >> "$WEBHOOKS_FILE"
+        if [ -n "$webhook" ]; then # Only add non-empty webhooks
+            echo "$webhook" >>"$WEBHOOKS_FILE"
         fi
     done
-    
+
     log_message "INFO" "Removed webhook: $removed_webhook"
     return 0
 }
@@ -276,13 +276,13 @@ print_config() {
     echo "  Disk Usage Threshold: ${DISK_THRESHOLD}%"
     echo "  System Load Threshold: ${LOAD_THRESHOLD}"
     echo "  Check Interval: ${CHECK_INTERVAL} seconds"
-    
+
     if [ -n "$PROCESS_CHECKS" ]; then
         echo "  Process Checks: ${PROCESS_CHECKS}"
     else
         echo "  Process Checks: None"
     fi
-    
+
     print_line
     echo "Webhooks:"
     if [ ${#WEBHOOKS[@]} -eq 0 ]; then

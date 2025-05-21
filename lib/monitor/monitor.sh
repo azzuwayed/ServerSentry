@@ -3,14 +3,14 @@
 # ServerSentry - Monitoring functionality (merged and improved)
 
 # Source dependencies if not already sourced
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 SCRIPT_DIR="$(dirname "$SCRIPT_DIR")"
 
 if [[ "$(type -t log_message)" != "function" ]]; then
     source "$SCRIPT_DIR/lib/utils.sh"
 fi
 if [[ "$(type -t send_webhook_notification)" != "function" ]]; then
-    source "$SCRIPT_DIR/lib/notify.sh"
+    source "$SCRIPT_DIR/lib/notify/main.sh"
 fi
 if [[ "$(type -t load_thresholds)" != "function" ]]; then
     source "$SCRIPT_DIR/lib/config.sh"
@@ -22,13 +22,13 @@ RESULT=""
 # Get CPU usage percentage (robust, cross-platform)
 get_cpu_usage() {
     local result=0
-    
+
     if [[ "$(uname)" == "Darwin" ]]; then
         # macOS-specific approach using alternate methods
         local cpu_line=$(sysctl -n vm.loadavg 2>/dev/null)
         if [ -n "$cpu_line" ]; then
             # Get current system load average
-            local load=$(echo $cpu_line | awk '{print $2}')
+            local load=$(echo "$cpu_line" | awk '{print $2}')
             # Get number of cores
             local cores=$(sysctl -n hw.ncpu 2>/dev/null)
             # Calculate usage as percentage of available cores
@@ -53,22 +53,22 @@ get_cpu_usage() {
         # Linux specific approach
         local cpu_line=$(top -bn 1 | grep -i '%cpu\|cpu(s)')
         local cpu_idle=""
-        
+
         # Try to extract idle percentage using different patterns
         cpu_idle=$(echo "$cpu_line" | grep -o '[0-9.]*[% ]*id' | grep -o '[0-9.]*')
-        
+
         if [ -z "$cpu_idle" ]; then
-            # Try alternate format 
+            # Try alternate format
             cpu_idle=$(echo "$cpu_line" | awk '{for(i=1;i<=NF;i++) {if($i ~ /id|idle/) {print $(i-1)}}}' | grep -o '[0-9.]*')
         fi
-        
+
         if [ -n "$cpu_idle" ]; then
             result=$(awk -v idle="$cpu_idle" 'BEGIN {print 100 - idle}')
         else
             # Last resort - try to parse the line differently
             local user=$(echo "$cpu_line" | grep -o '[0-9.]*[% ]*us' | grep -o '[0-9.]*')
             local system=$(echo "$cpu_line" | grep -o '[0-9.]*[% ]*sy' | grep -o '[0-9.]*')
-            
+
             if [ -n "$user" ] && [ -n "$system" ]; then
                 result=$(awk -v u="$user" -v s="$system" 'BEGIN {print u + s}')
             fi
@@ -81,16 +81,20 @@ get_cpu_usage() {
             local cpu_line2=$(grep '^cpu ' /proc/stat)
             local cpu1=($(echo "$cpu_line1" | awk '{$1=""; print $0}'))
             local cpu2=($(echo "$cpu_line2" | awk '{$1=""; print $0}'))
-            local total1=0; local total2=0; local idle1=${cpu1[3]}; local idle2=${cpu2[3]}
+            local total1=0
+            local total2=0
+            local idle1=${cpu1[3]}
+            local idle2=${cpu2[3]}
             for val in "${cpu1[@]}"; do total1=$((total1 + val)); done
             for val in "${cpu2[@]}"; do total2=$((total2 + val)); done
-            local delta_total=$((total2 - total1)); local delta_idle=$((idle2 - idle1))
+            local delta_total=$((total2 - total1))
+            local delta_idle=$((idle2 - idle1))
             if [ "$delta_total" -gt 0 ]; then
                 result=$(awk -v dt="$delta_total" -v di="$delta_idle" 'BEGIN {printf "%.1f", 100 * (1 - di/dt)}')
             fi
         fi
     fi
-    
+
     result=$(printf "%.0f" "$result" 2>/dev/null || echo "$result" | awk '{printf "%.0f", $1}' 2>/dev/null || echo "0")
     if ! is_number "$result"; then result=0; fi
     RESULT="$result"
@@ -100,7 +104,7 @@ get_cpu_usage() {
 # Get memory usage percentage (robust, cross-platform)
 get_memory_usage() {
     local result=0
-    
+
     if [[ "$(uname)" == "Darwin" ]]; then
         # macOS-specific memory usage - improved parsing
         local memory_line=$(top -l 1 -n 0 | grep PhysMem)
@@ -108,13 +112,13 @@ get_memory_usage() {
             # Extract total memory
             local total_mem=$(sysctl -n hw.memsize 2>/dev/null)
             total_mem=$((total_mem / 1024 / 1024)) # Convert bytes to MB
-            
+
             # Extract used memory from PhysMem line
             # Modern macOS format: "PhysMem: 16G used (3680M wired, 665M compressor), 469M unused."
             if [[ "$memory_line" == *"used"*"unused"* ]]; then
                 local used_str=$(echo "$memory_line" | grep -o '[0-9]*G used' | grep -o '[0-9]*')
                 local unused_str=$(echo "$memory_line" | grep -o '[0-9]*M unused' | grep -o '[0-9]*')
-                
+
                 # Convert gigabytes to megabytes if needed
                 if [ -n "$used_str" ]; then
                     local used_mb=$((used_str * 1024))
@@ -131,13 +135,13 @@ get_memory_usage() {
                 # Fallback: Try to extract wired/active memory and calculate
                 local wired=$(echo "$memory_line" | grep -o '[0-9]*M wired' | grep -o '[0-9]*')
                 local active=$(echo "$memory_line" | grep -o '[0-9]*M active' | grep -o '[0-9]*')
-                
+
                 if [ -n "$wired" ] && [ -n "$active" ] && [ -n "$total_mem" ]; then
                     local used_mem=$((wired + active))
                     result=$(awk -v u="$used_mem" -v t="$total_mem" 'BEGIN {printf "%.0f", (u/t)*100}')
                 fi
             fi
-            
+
             # Ensure we have a valid result
             if [ -z "$result" ] || [ "$result" -eq 0 ]; then
                 # Last resort: estimate based on unused memory
@@ -168,7 +172,7 @@ get_memory_usage() {
             fi
         fi
     fi
-    
+
     result=$(printf "%.0f" "$result" 2>/dev/null || echo "$result" | awk '{printf "%.0f", $1}' 2>/dev/null || echo "0")
     if ! is_number "$result"; then result=0; fi
     RESULT="$result"
@@ -179,11 +183,11 @@ get_memory_usage() {
 get_disk_usage() {
     local result=0
     local mount_point="/"
-    
+
     if [ -n "$1" ]; then
         mount_point="$1"
     fi
-    
+
     if command_exists df; then
         # Using df command for specified partition
         # Handle macOS/BSD vs Linux differences in df output
@@ -194,7 +198,7 @@ get_disk_usage() {
             local disk_info=$(df -P "$mount_point" 2>/dev/null | tail -n 1)
             local usage=$(echo "$disk_info" | awk '{print $5}' | tr -d '%')
         fi
-        
+
         if is_number "$usage"; then
             result="$usage"
         else
@@ -205,7 +209,7 @@ get_disk_usage() {
             fi
         fi
     fi
-    
+
     RESULT="$result"
     echo "$result"
 }
@@ -230,39 +234,39 @@ get_system_load() {
 # Check if a specific process is running
 check_process_running() {
     local process_name="$1"
-    
+
     if command_exists pgrep; then
         # Using pgrep (slightly different syntax for macOS vs Linux)
         if [[ "$(uname)" == "Darwin" ]]; then
             if pgrep "$process_name" >/dev/null; then
-                return 0  # Process is running
+                return 0 # Process is running
             fi
         else
             if pgrep -x "$process_name" >/dev/null; then
-                return 0  # Process is running
+                return 0 # Process is running
             fi
         fi
     elif command_exists ps; then
         # Using ps
         if ps aux | grep -v grep | grep -q "$process_name"; then
-            return 0  # Process is running
+            return 0 # Process is running
         fi
     fi
-    
-    return 1  # Process is not running
+
+    return 1 # Process is not running
 }
 
 # Get top CPU consuming processes
 get_top_cpu_processes() {
     local count="${1:-5}"
-    
+
     if command_exists ps; then
         if [[ "$(uname)" == "Darwin" ]]; then
             # macOS version
-            ps -arcwwxo command,pcpu | head -n "$((count+1))" | tail -n "$count" | awk '{print $1, $2"%"}'
+            ps -arcwwxo command,pcpu | head -n "$((count + 1))" | tail -n "$count" | awk '{print $1, $2"%"}'
         else
             # Linux version
-            ps aux | sort -rn -k 3,3 | head -n "$((count+1))" | tail -n "$count" | awk '{print $11, $3"%"}'
+            ps aux | sort -rn -k 3,3 | head -n "$((count + 1))" | tail -n "$count" | awk '{print $11, $3"%"}'
         fi
     else
         echo "Process information not available"
@@ -272,14 +276,14 @@ get_top_cpu_processes() {
 # Get top memory consuming processes
 get_top_memory_processes() {
     local count="${1:-5}"
-    
+
     if command_exists ps; then
         if [[ "$(uname)" == "Darwin" ]]; then
             # macOS version
-            ps -arcwwxo command,pmem | head -n "$((count+1))" | tail -n "$count" | awk '{print $1, $2"%"}'
+            ps -arcwwxo command,pmem | head -n "$((count + 1))" | tail -n "$count" | awk '{print $1, $2"%"}'
         else
             # Linux version
-            ps aux | sort -rn -k 4,4 | head -n "$((count+1))" | tail -n "$count" | awk '{print $11, $4"%"}'
+            ps aux | sort -rn -k 4,4 | head -n "$((count + 1))" | tail -n "$count" | awk '{print $11, $4"%"}'
         fi
     else
         echo "Process information not available"
@@ -291,7 +295,7 @@ check_cpu() {
     get_cpu_usage
     local cpu_usage=$RESULT
     log_message "INFO" "CPU usage: $cpu_usage% (threshold: $CPU_THRESHOLD%)"
-    
+
     # Force conversion to integers and handle errors for reliable comparison
     if [ "${cpu_usage:-0}" -ge "${CPU_THRESHOLD:-80}" ] 2>/dev/null; then
         log_message "WARNING" "CPU usage exceeded threshold: $cpu_usage% >= $CPU_THRESHOLD%"
@@ -307,7 +311,7 @@ check_memory() {
     get_memory_usage
     local memory_usage=$RESULT
     log_message "INFO" "Memory usage: $memory_usage% (threshold: $MEMORY_THRESHOLD%)"
-    
+
     # Force conversion to integers and handle errors for reliable comparison
     if [ "${memory_usage:-0}" -ge "${MEMORY_THRESHOLD:-80}" ] 2>/dev/null; then
         log_message "WARNING" "Memory usage exceeded threshold: $memory_usage% >= $MEMORY_THRESHOLD%"
@@ -323,7 +327,7 @@ check_disk() {
     get_disk_usage
     local disk_usage=$RESULT
     log_message "INFO" "Disk usage: $disk_usage% (threshold: $DISK_THRESHOLD%)"
-    
+
     # Force conversion to integers and handle errors for reliable comparison
     if [ "${disk_usage:-0}" -ge "${DISK_THRESHOLD:-85}" ] 2>/dev/null; then
         log_message "WARNING" "Disk usage exceeded threshold: $disk_usage% >= $DISK_THRESHOLD%"
@@ -332,7 +336,7 @@ check_disk() {
             if [[ "$(uname)" == "Darwin" ]]; then
                 # macOS specific directories
                 top_dirs=$(du -h /var /tmp /Users 2>/dev/null | sort -hr | head -n 5)
-            else 
+            else
                 # Linux directories
                 top_dirs=$(du -h /var /tmp /home 2>/dev/null | sort -rh | head -n 5)
             fi
@@ -349,7 +353,7 @@ check_processes() {
         return 0
     fi
     log_message "INFO" "Checking monitored processes"
-    IFS=',' read -ra PROCESSES <<< "$PROCESS_CHECKS"
+    IFS=',' read -ra PROCESSES <<<"$PROCESS_CHECKS"
     local failed_processes=""
     for process in "${PROCESSES[@]}"; do
         process=$(echo "$process" | xargs)
