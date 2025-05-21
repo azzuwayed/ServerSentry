@@ -196,11 +196,12 @@ Easily configure ServerSentry for your specific environment:
 
 ServerSentry uses a modular design with components in the `lib` directory:
 
-- `utils.sh`: Common utility functions
-- `config.sh`: Configuration management
-- `monitor.sh`: System resource monitoring
-- `notify.sh`: Notification handling with webhook support
-- `periodic.sh`: Scheduled system reporting
+- `utils/utils.sh`: Common utility functions
+- `config/config.sh`: Configuration management
+- `monitor/monitor.sh`: System resource monitoring
+- `monitor/periodic.sh`: Scheduled system reporting
+- `log/logrotate.sh`: Log file management
+- `notify/main.sh` and `notify/`: Notification handling with webhook support
 
 ## Troubleshooting
 

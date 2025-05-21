@@ -44,22 +44,24 @@ if [ ! -d "$SCRIPT_DIR/lib" ]; then
 fi
 
 # Source the modular library files
-if [ ! -f "$SCRIPT_DIR/lib/utils.sh" ] ||
-    [ ! -f "$SCRIPT_DIR/lib/config.sh" ] ||
-    [ ! -f "$SCRIPT_DIR/lib/monitor.sh" ] ||
+if [ ! -f "$SCRIPT_DIR/lib/utils/utils.sh" ] ||
+    [ ! -f "$SCRIPT_DIR/lib/config/config.sh" ] ||
+    [ ! -f "$SCRIPT_DIR/lib/monitor/monitor.sh" ] ||
+    [ ! -f "$SCRIPT_DIR/lib/monitor/periodic.sh" ] ||
+    [ ! -f "$SCRIPT_DIR/lib/log/logrotate.sh" ] ||
     [ ! -f "$SCRIPT_DIR/lib/notify/main.sh" ]; then
     echo "Error: Required library files not found. Please reinstall the application."
-    echo "Missing one or more of: utils.sh, config.sh, monitor.sh, notify/main.sh"
+    echo "Missing one or more of: utils/utils.sh, config/config.sh, monitor/monitor.sh, monitor/periodic.sh, log/logrotate.sh, notify/main.sh"
     exit 1
 fi
 
 # Source library files
-source "$SCRIPT_DIR/lib/utils.sh"
-source "$SCRIPT_DIR/lib/config.sh"
-source "$SCRIPT_DIR/lib/monitor.sh"
+source "$SCRIPT_DIR/lib/utils/utils.sh"
+source "$SCRIPT_DIR/lib/config/config.sh"
+source "$SCRIPT_DIR/lib/monitor/monitor.sh"
+source "$SCRIPT_DIR/lib/monitor/periodic.sh"
+source "$SCRIPT_DIR/lib/log/logrotate.sh"
 source "$SCRIPT_DIR/lib/notify/main.sh"
-source "$SCRIPT_DIR/lib/periodic.sh"
-source "$SCRIPT_DIR/lib/logrotate.sh"
 
 # Initialize log file if it doesn't exist
 touch "$LOG_FILE" 2>/dev/null || {

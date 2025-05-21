@@ -7,7 +7,7 @@
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." &>/dev/null && pwd)"
 
 # Source all required modules using PROJECT_ROOT
-source "$PROJECT_ROOT/lib/utils.sh"
+source "$PROJECT_ROOT/lib/utils/utils.sh"
 source "$PROJECT_ROOT/lib/notify/system_info.sh"
 source "$PROJECT_ROOT/lib/notify/teams_cards.sh"
 source "$PROJECT_ROOT/lib/notify/formatters.sh"

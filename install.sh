@@ -87,11 +87,11 @@ set_permissions() {
     chmod +x "$SCRIPT_DIR/serversentry.sh"
 
     if [ -d "$SCRIPT_DIR/lib" ]; then
-        chmod +x "$SCRIPT_DIR/lib/config.sh"
-        chmod +x "$SCRIPT_DIR/lib/monitor.sh"
-        chmod +x "$SCRIPT_DIR/lib/utils.sh"
-        chmod +x "$SCRIPT_DIR/lib/periodic.sh"
-        chmod +x "$SCRIPT_DIR/lib/logrotate.sh"
+        chmod +x "$SCRIPT_DIR/lib/config/config.sh"
+        chmod +x "$SCRIPT_DIR/lib/monitor/monitor.sh"
+        chmod +x "$SCRIPT_DIR/lib/utils/utils.sh"
+        chmod +x "$SCRIPT_DIR/lib/monitor/periodic.sh"
+        chmod +x "$SCRIPT_DIR/lib/log/logrotate.sh"
     fi
 
     echo -e "${GREEN}Done!${NC}"
