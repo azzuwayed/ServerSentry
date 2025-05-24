@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Slack Notification Provider
 #
@@ -121,7 +121,7 @@ EOF
   )
 
   # Check if details are provided and add them to the payload
-  if [ -n "$details" ] && compat_command_exists jq; then
+  if [ -n "$details" ] && util_command_exists jq; then
     # Try to parse details as JSON
     if echo "$details" | jq -e . >/dev/null 2>&1; then
       # Extract metrics
@@ -148,8 +148,8 @@ EOF
   # Send to Slack
   log_debug "Sending notification to Slack webhook"
 
-  # Check if curl is installed using compatibility layer
-  if ! compat_command_exists curl; then
+  # Check if curl is installed using unified command utility
+  if ! util_command_exists curl; then
     log_error "Cannot send Slack notification: 'curl' command not found"
     return 1
   fi

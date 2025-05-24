@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Shared TUI utility functions
 
 # Show a message (info, warning, error) in the appropriate UI

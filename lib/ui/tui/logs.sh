@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # TUI logs module
 
 source "$(dirname "$0")/utils.sh"

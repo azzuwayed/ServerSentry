@@ -260,7 +260,7 @@ tests/
 ### Test Framework Standards
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 # Test: test_config_load
 # Description: Test configuration loading functionality
 

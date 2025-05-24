@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Process Monitoring Plugin
 #
@@ -45,8 +45,8 @@ process_plugin_check() {
   local missing_processes=()
   local running_processes=()
 
-  # Check if required commands exist using compatibility layer
-  if ! compat_command_exists ps && ! compat_command_exists pgrep; then
+  # Check if required commands exist using unified command utility
+  if ! util_command_exists ps && ! util_command_exists pgrep; then
     status_code=3
     status_message="Cannot check processes: neither 'ps' nor 'pgrep' command found"
 
@@ -83,12 +83,12 @@ EOF
     local is_running=false
 
     # Try to find the process using pgrep first (more reliable)
-    if compat_command_exists pgrep; then
+    if util_command_exists pgrep; then
       if pgrep -f "$process" >/dev/null 2>&1; then
         is_running=true
       fi
     # Fall back to ps if pgrep is not available
-    elif compat_command_exists ps; then
+    elif util_command_exists ps; then
       if ps -ef | grep -v grep | grep -q "$process"; then
         is_running=true
       fi

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Email Notification Provider
 #
@@ -59,19 +59,19 @@ email_provider_configure() {
   # Validate method-specific requirements
   case "$email_send_method" in
   mail)
-    if ! compat_command_exists mail; then
+    if ! util_command_exists mail; then
       log_error "Mail command not found, cannot use 'mail' method"
       return 1
     fi
     ;;
   sendmail)
-    if ! compat_command_exists sendmail; then
+    if ! util_command_exists sendmail; then
       log_error "Sendmail command not found, cannot use 'sendmail' method"
       return 1
     fi
     ;;
   smtp)
-    if ! compat_command_exists curl; then
+    if ! util_command_exists curl; then
       log_error "Curl command not found, cannot use 'smtp' method"
       return 1
     fi
@@ -136,7 +136,7 @@ EOF
 
   # Add details if available
   if [ -n "$details" ]; then
-    if compat_command_exists jq && echo "$details" | jq -e . >/dev/null 2>&1; then
+    if util_command_exists jq && echo "$details" | jq -e . >/dev/null 2>&1; then
       # Format JSON details nicely
       body="${body}
 
@@ -174,63 +174,65 @@ send_via_mail() {
 
   log_debug "Sending email via mail command"
 
-  # Check if mail command exists using compatibility layer
-  if ! compat_command_exists mail; then
-    log_error "Cannot send email: 'mail' command not found"
+  if ! util_command_exists mail; then
+    log_error "Mail command not found"
     return 1
   fi
 
-  # Send using mail
-  echo "$body" | mail -s "$subject" "$email_recipients"
-  local exit_code=$?
+  # Send to each recipient
+  IFS=',' read -r -a recipients <<<"$email_recipients"
+  for recipient in "${recipients[@]}"; do
+    # Skip empty entries
+    [ -z "$recipient" ] && continue
 
-  if [ $exit_code -ne 0 ]; then
-    log_error "Failed to send email via mail command"
-    return 1
-  fi
+    if echo -e "$body" | mail -s "$subject" "$recipient"; then
+      log_debug "Email sent successfully to $recipient via mail"
+    else
+      log_error "Failed to send email to $recipient via mail"
+      return 1
+    fi
+  done
 
-  log_debug "Email notification sent successfully via mail"
   return 0
 }
 
-# Send via sendmail
+# Send via sendmail command
 send_via_sendmail() {
   local subject="$1"
   local body="$2"
 
   log_debug "Sending email via sendmail command"
 
-  # Check if sendmail command exists using compatibility layer
-  if ! compat_command_exists sendmail; then
-    log_error "Cannot send email: 'sendmail' command not found"
+  if ! util_command_exists sendmail; then
+    log_error "Sendmail command not found"
     return 1
   fi
 
-  # Format recipients
-  local to_list=""
-  for recipient in $email_recipients; do
-    to_list="${to_list}To: ${recipient}
-"
+  # Send to each recipient
+  IFS=',' read -r -a recipients <<<"$email_recipients"
+  for recipient in "${recipients[@]}"; do
+    # Skip empty entries
+    [ -z "$recipient" ] && continue
+
+    local email_message
+    email_message=$(
+      cat <<EOF
+To: ${recipient}
+From: ${email_sender}
+Subject: ${subject}
+
+${body}
+EOF
+    )
+
+    if echo -e "$email_message" | sendmail "$recipient"; then
+      log_debug "Email sent successfully to $recipient via sendmail"
+    else
+      log_error "Failed to send email to $recipient via sendmail"
+      return 1
+    fi
   done
 
-  # Send using sendmail
-  {
-    echo "From: ${email_sender}"
-    echo "$to_list"
-    echo "Subject: $subject"
-    echo "MIME-Version: 1.0"
-    echo "Content-Type: text/plain; charset=utf-8"
-    echo ""
-    echo "$body"
-  } | sendmail -t
-  local exit_code=$?
-
-  if [ $exit_code -ne 0 ]; then
-    log_error "Failed to send email via sendmail command"
-    return 1
-  fi
-
-  log_debug "Email notification sent successfully via sendmail"
   return 0
 }
 
@@ -241,72 +243,61 @@ send_via_smtp() {
 
   log_debug "Sending email via SMTP"
 
-  # Check if curl command exists using compatibility layer
-  if ! compat_command_exists curl; then
-    log_error "Cannot send email: 'curl' command not found"
+  if ! util_command_exists curl; then
+    log_error "Curl command not found"
     return 1
   fi
 
-  # Create a temp file for the email content
-  local temp_file
-  temp_file=$(mktemp)
-
-  # Format recipients
-  local to_list=""
-  for recipient in $email_recipients; do
-    to_list="${to_list}To: ${recipient}
-"
-  done
-
-  # Create email content
-  {
-    echo "From: ${email_sender}"
-    echo "$to_list"
-    echo "Subject: $subject"
-    echo "MIME-Version: 1.0"
-    echo "Content-Type: text/plain; charset=utf-8"
-    echo ""
-    echo "$body"
-  } >"$temp_file"
-
-  # Build curl command
-  local curl_cmd="curl --silent --show-error "
-
-  # Add SMTP server info
-  curl_cmd+="--url 'smtp://${email_smtp_server}:${email_smtp_port}' "
-
-  # Add authentication if provided
-  if [ -n "$email_smtp_user" ]; then
-    curl_cmd+="--user '${email_smtp_user}:${email_smtp_password}' "
-  fi
-
-  # Add TLS if enabled
+  # Build SMTP URL
+  local smtp_url="smtp://${email_smtp_server}:${email_smtp_port}"
   if [ "$email_smtp_use_tls" = "true" ]; then
-    curl_cmd+="--ssl-reqd "
+    smtp_url="smtps://${email_smtp_server}:${email_smtp_port}"
   fi
 
-  # Add sender and recipients
-  curl_cmd+="--mail-from '${email_sender}' "
-  for recipient in $email_recipients; do
-    curl_cmd+="--mail-rcpt '${recipient}' "
+  # Send to each recipient
+  IFS=',' read -r -a recipients <<<"$email_recipients"
+  for recipient in "${recipients[@]}"; do
+    # Skip empty entries
+    [ -z "$recipient" ] && continue
+
+    # Create email message
+    local email_message
+    email_message=$(
+      cat <<EOF
+To: ${recipient}
+From: ${email_sender}
+Subject: ${subject}
+
+${body}
+EOF
+    )
+
+    # Build curl command
+    local curl_args=(
+      "--url" "$smtp_url"
+      "--mail-from" "$email_sender"
+      "--mail-rcpt" "$recipient"
+      "--upload-file" "-"
+    )
+
+    # Add authentication if configured
+    if [ -n "$email_smtp_user" ] && [ -n "$email_smtp_password" ]; then
+      curl_args+=("--user" "${email_smtp_user}:${email_smtp_password}")
+    fi
+
+    # Add TLS options
+    if [ "$email_smtp_use_tls" = "true" ]; then
+      curl_args+=("--ssl-reqd")
+    fi
+
+    # Send email
+    if echo -e "$email_message" | curl "${curl_args[@]}"; then
+      log_debug "Email sent successfully to $recipient via SMTP"
+    else
+      log_error "Failed to send email to $recipient via SMTP"
+      return 1
+    fi
   done
 
-  # Add the email content
-  curl_cmd+="--upload-file $temp_file"
-
-  # Send the email
-  local response
-  response=$(eval "$curl_cmd" 2>&1)
-  local exit_code=$?
-
-  # Clean up temp file
-  rm -f "$temp_file"
-
-  if [ $exit_code -ne 0 ]; then
-    log_error "Failed to send email via SMTP: $response"
-    return 1
-  fi
-
-  log_debug "Email notification sent successfully via SMTP"
   return 0
 }

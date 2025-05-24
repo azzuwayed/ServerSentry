@@ -30,7 +30,7 @@ touch lib/plugins/your_plugin/your_plugin.sh
 Edit the file to implement the required functions:
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Your Plugin Name
 #

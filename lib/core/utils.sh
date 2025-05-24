@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Utilities Loader
 #
@@ -14,13 +14,6 @@ BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 #   0 - success
 #   1 - failure
 init_utilities() {
-  # Fallback logging functions if logging system not available
-  if ! declare -f log_debug >/dev/null 2>&1; then
-    log_debug() { echo "[DEBUG] $1" >&2; }
-    log_warning() { echo "[WARNING] $1" >&2; }
-    log_error() { echo "[ERROR] $1" >&2; }
-  fi
-
   # Use professional logging with utils component
   log_debug "Initializing utility modules" "utils"
 
@@ -67,14 +60,6 @@ init_utilities() {
   return 0
 }
 
-# Initialize utilities when this module is sourced
-# Ensure basic logging functions are available first
-if ! declare -f log_debug >/dev/null 2>&1; then
-  log_debug() { echo "[DEBUG] $1" >&2; }
-  log_warning() { echo "[WARNING] $1" >&2; }
-  log_error() { echo "[ERROR] $1" >&2; }
-fi
-
 # Source compatibility utilities first
 if [[ -f "$BASE_DIR/lib/core/utils/compat_utils.sh" ]]; then
   source "$BASE_DIR/lib/core/utils/compat_utils.sh"
@@ -90,22 +75,14 @@ fi
 
 # Backward compatibility wrapper for command_exists
 command_exists() {
-  local command="$1"
-
-  # Use compatibility layer if available
-  if declare -f compat_command_exists >/dev/null 2>&1; then
-    compat_command_exists "$command"
-    return $?
-  fi
-
-  # Fallback to cached version if available
-  if declare -f util_command_exists_cached >/dev/null 2>&1; then
-    util_command_exists_cached "$1"
+  # Use unified command utility if available
+  if declare -f util_command_exists >/dev/null 2>&1; then
+    util_command_exists "$1"
     return $?
   fi
 
   # Basic fallback
-  command -v "$command" >/dev/null 2>&1
+  command -v "$1" >/dev/null 2>&1
 }
 
 # Backward compatibility wrapper for get_os_type
@@ -199,162 +176,49 @@ to_uppercase() {
   echo "$1" | tr '[:lower:]' '[:upper:]'
 }
 
-# Trim whitespace
-trim() {
-  local var="$*"
-  # remove leading whitespace
-  var="${var#"${var%%[![:space:]]*}"}"
-  # remove trailing whitespace
-  var="${var%"${var##*[![:space:]]}"}"
-  echo -n "$var"
+# Sanitize filename
+sanitize_filename() {
+  local filename="$1"
+  # Remove/replace problematic characters
+  echo "$filename" | sed 's/[^a-zA-Z0-9._-]/_/g'
 }
 
-# Validate IP address (uses validation utils)
-is_valid_ip() {
-  local ip="$1"
+# Create directory with proper permissions
+create_secure_dir() {
+  local dir="$1"
+  local permissions="${2:-755}"
 
-  # Use validation utils if available, otherwise use basic validation
-  if declare -f util_validate_ip_address >/dev/null 2>&1; then
-    util_validate_ip_address "$ip" "ip_address"
-  else
-    # Basic IP validation for testing
-    if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+  if [[ ! -d "$dir" ]]; then
+    if mkdir -p "$dir"; then
+      chmod "$permissions" "$dir"
+      return 0
+    else
       return 1
     fi
-
-    local IFS='.'
-    local octets=($ip)
-    for octet in "${octets[@]}"; do
-      if [[ "$octet" -gt 255 ]]; then
-        return 1
-      fi
-    done
-    return 0
   fi
-}
-
-# Generate a random string
-random_string() {
-  local length="${1:-32}"
-  if [[ -r /dev/urandom ]]; then
-    # Use LC_ALL=C to avoid locale issues with tr
-    LC_ALL=C tr -dc 'a-zA-Z0-9' </dev/urandom | head -c "$length"
-  else
-    # Fallback for systems without /dev/urandom - add microsecond precision
-    local timestamp=$(date +%s.%N 2>/dev/null || date +%s)
-    echo "${timestamp}${RANDOM}" | sha256sum | base64 | tr -d '=' | head -c "$length"
-  fi
-}
-
-# Check if a directory is writable
-is_dir_writable() {
-  local dir="$1"
-  [[ -d "$dir" && -w "$dir" ]]
-}
-
-# Enhanced get_timestamp function
-get_timestamp() {
-  # Use compatibility layer if available
-  if declare -f compat_date >/dev/null 2>&1; then
-    compat_date --iso-8601=seconds 2>/dev/null || date '+%Y-%m-%dT%H:%M:%S%z'
-  else
-    date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date
-  fi
-}
-
-# Get formatted date
-get_formatted_date() {
-  local format="${1:-"%Y-%m-%d %H:%M:%S"}"
-
-  # Use cached version if available, fallback to original
-  if declare -f util_get_cached_formatted_date >/dev/null 2>&1; then
-    util_get_cached_formatted_date "$format" 1
-  else
-    date +"$format"
-  fi
-}
-
-# Safe file write (write to temp file, then move)
-safe_write() {
-  local target_file="$1"
-  local content="$2"
-
-  local tmp_file="${target_file}.tmp"
-  echo "$content" >"$tmp_file" || return 1
-  mv "$tmp_file" "$target_file" || return 1
-
   return 0
 }
 
-# URL encode
-url_encode() {
-  local string="$1"
-  local strlen=${#string}
-  local encoded=""
-  local pos c o
-
-  for ((pos = 0; pos < strlen; pos++)); do
-    c=${string:$pos:1}
-    case "$c" in
-    [-_.~a-zA-Z0-9]) o="$c" ;;
-    *) printf -v o '%%%02x' "'$c" ;;
-    esac
-    encoded+="$o"
-  done
-
-  echo "$encoded"
-}
-
-# JSON escape (uses JSON utils)
-json_escape() {
-  local json="$1"
-
-  # Use JSON utils if available, otherwise use basic escaping
-  if declare -f util_json_escape >/dev/null 2>&1; then
-    util_json_escape "$json"
-  else
-    # Basic JSON escaping for testing
-    echo "$json" | sed 's/\\/\\\\/g; s/"/\\"/g'
-  fi
-}
-
-# === MODERN UTILITY OPERATIONS ===
-
-# Create secure temporary file
+# Create temporary file with cleanup
 create_temp_file() {
   local prefix="${1:-serversentry}"
   local temp_file
-  temp_file=$(mktemp -t "${prefix}.XXXXXX") || return 1
+
+  if command_exists mktemp; then
+    temp_file=$(mktemp -t "${prefix}.XXXXXX")
+  else
+    # Fallback for systems without mktemp
+    temp_file="/tmp/${prefix}.$$.$RANDOM"
+    touch "$temp_file"
+  fi
+
   echo "$temp_file"
 }
 
-# Create secure directory
-create_secure_dir() {
-  local dir="$1"
-  local mode="${2:-755}"
-
-  mkdir -p "$dir" || return 1
-  chmod "$mode" "$dir" || return 1
-
-  return 0
-}
-
-# Create secure file
-create_secure_file() {
-  local file="$1"
-  local mode="${2:-644}"
-
-  touch "$file" || return 1
-  chmod "$mode" "$file" || return 1
-
-  return 0
-}
-
-# Enhanced error handling with context
+# Enhanced error logging with context
 log_error_context() {
   local message="$1"
   local context="${2:-}"
-
   local caller_function="${FUNCNAME[1]}"
   local caller_line="${BASH_LINENO[0]}"
 
@@ -365,7 +229,7 @@ log_error_context() {
   fi
 }
 
-# Standardized retry mechanism
+# Retry operation with backoff
 retry_operation() {
   local max_attempts="$1"
   local delay="$2"
@@ -470,25 +334,17 @@ get_file_mtime() {
 
 # Export modern utility functions
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  export -f init_utilities
   export -f command_exists
-  export -f is_root
   export -f get_os_type
+  export -f is_root
   export -f get_linux_distro
   export -f format_bytes
   export -f to_lowercase
   export -f to_uppercase
-  export -f trim
-  export -f is_valid_ip
-  export -f random_string
-  export -f is_dir_writable
-  export -f get_timestamp
-  export -f get_formatted_date
-  export -f safe_write
-  export -f url_encode
-  export -f json_escape
-  export -f create_temp_file
+  export -f sanitize_filename
   export -f create_secure_dir
-  export -f create_secure_file
+  export -f create_temp_file
   export -f log_error_context
   export -f retry_operation
   export -f measure_performance

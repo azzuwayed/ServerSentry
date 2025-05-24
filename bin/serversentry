@@ -9,6 +9,7 @@ set -eo pipefail
 # Get the base directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
+export BASE_DIR
 
 # Early argument parsing for log level settings
 for arg in "$@"; do
@@ -22,76 +23,194 @@ for arg in "$@"; do
   esac
 done
 
-# Source compatibility utilities first
-source "$BASE_DIR/lib/core/utils/compat_utils.sh"
+# === CORE SYSTEM INITIALIZATION ===
 
-# Source core components in proper order
-source "$BASE_DIR/lib/core/logging.sh" # Load logging first
-source "$BASE_DIR/lib/core/utils.sh"   # Load utilities second
-source "$BASE_DIR/lib/core/config.sh"  # Load config third
-
-# Initialize logging system first
-if ! logging_init; then
-  echo "FATAL: Failed to initialize logging system" >&2
-  exit 1
-fi
-
-# Run startup optimizations
-if declare -f util_performance_optimize_startup >/dev/null 2>&1; then
-  util_performance_optimize_startup
-fi
-
-# Load configuration with new standardized function
-if ! config_load; then
-  log_error "Failed to load configuration"
-  exit 1
-fi
-
-# Source remaining components
-source "$BASE_DIR/lib/core/plugin.sh"
-source "$BASE_DIR/lib/core/notification.sh"
-source "$BASE_DIR/lib/ui/cli/commands.sh"
-
-# Main function with enhanced error handling
-main() {
-  # Initialize the application with proper logging
-  log_debug "Starting ServerSentry v2"
-  log_debug "Base directory: $BASE_DIR"
-  log_debug "Configuration loaded from: $(config_get_value 'config_file' 'default')"
-
-  # Initialize plugin system with new standardized function
-  if ! plugin_system_init; then
-    log_error "Failed to initialize plugin system"
-    exit 1
-  fi
-
-  # Initialize notification system with new standardized function
-  if ! notification_system_init; then
-    log_error "Failed to initialize notification system"
-    # Non-fatal error, continue without notifications
-    log_warning "Continuing without notification support"
+# Function: init_core_system
+# Description: Initialize core system components in proper order
+# Returns:
+#   0 - success
+#   1 - failure
+init_core_system() {
+  # 1. Load logging system first (required by all other components)
+  if [[ -f "$BASE_DIR/lib/core/logging.sh" ]]; then
+    # shellcheck source=lib/core/logging.sh
+    source "$BASE_DIR/lib/core/logging.sh"
+    if ! logging_init; then
+      echo "FATAL: Failed to initialize logging system" >&2
+      return 1
+    fi
   else
-    log_debug "Notification system initialized successfully"
+    echo "FATAL: Logging system not found: $BASE_DIR/lib/core/logging.sh" >&2
+    return 1
   fi
 
-  # Log system status only for status, help, or debug commands
-  local command="${1:-status}"
+  # 2. Load utilities second (required by config and other components)
+  if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
+    # shellcheck source=lib/core/utils.sh
+    source "$BASE_DIR/lib/core/utils.sh"
+    if ! init_utilities; then
+      log_error "Failed to initialize utility system"
+      return 1
+    fi
+  else
+    log_error "Utilities system not found: $BASE_DIR/lib/core/utils.sh"
+    return 1
+  fi
+
+  # 3. Load configuration third (depends on utilities)
+  if [[ -f "$BASE_DIR/lib/core/config.sh" ]]; then
+    # shellcheck source=lib/core/config.sh
+    source "$BASE_DIR/lib/core/config.sh"
+    if ! config_load; then
+      log_error "Failed to load configuration"
+      return 1
+    fi
+  else
+    log_error "Configuration system not found: $BASE_DIR/lib/core/config.sh"
+    return 1
+  fi
+
+  log_debug "Core system initialized successfully"
+  return 0
+}
+
+# Function: init_plugin_system
+# Description: Initialize the plugin management system
+# Returns:
+#   0 - success
+#   1 - failure
+init_plugin_system() {
+  if [[ -f "$BASE_DIR/lib/core/plugin.sh" ]]; then
+    # shellcheck source=lib/core/plugin.sh
+    source "$BASE_DIR/lib/core/plugin.sh"
+    if ! plugin_system_init; then
+      log_error "Failed to initialize plugin system"
+      return 1
+    fi
+    log_debug "Plugin system initialized successfully"
+    return 0
+  else
+    log_error "Plugin system not found: $BASE_DIR/lib/core/plugin.sh"
+    return 1
+  fi
+}
+
+# Function: init_notification_system
+# Description: Initialize the notification system
+# Returns:
+#   0 - success
+#   1 - failure (non-fatal)
+init_notification_system() {
+  if [[ -f "$BASE_DIR/lib/core/notification.sh" ]]; then
+    # shellcheck source=lib/core/notification.sh
+    source "$BASE_DIR/lib/core/notification.sh"
+    if ! notification_system_init; then
+      log_warning "Failed to initialize notification system - continuing without notifications"
+      return 1
+    fi
+    log_debug "Notification system initialized successfully"
+    return 0
+  else
+    log_warning "Notification system not found: $BASE_DIR/lib/core/notification.sh - continuing without notifications"
+    return 1
+  fi
+}
+
+# Function: init_ui_system
+# Description: Initialize the user interface system
+# Returns:
+#   0 - success
+#   1 - failure
+init_ui_system() {
+  if [[ -f "$BASE_DIR/lib/ui/cli/commands.sh" ]]; then
+    # shellcheck source=lib/ui/cli/commands.sh
+    source "$BASE_DIR/lib/ui/cli/commands.sh"
+    log_debug "UI system initialized successfully"
+    return 0
+  else
+    log_error "UI system not found: $BASE_DIR/lib/ui/cli/commands.sh"
+    return 1
+  fi
+}
+
+# Function: run_startup_optimizations
+# Description: Run performance optimizations during startup
+run_startup_optimizations() {
+  # Run performance optimizations if available
+  if declare -f util_performance_optimize_startup >/dev/null 2>&1; then
+    util_performance_optimize_startup
+  fi
+
+  # Pre-cache common commands for better performance
+  if declare -f util_command_cache_cleanup >/dev/null 2>&1; then
+    util_command_cache_cleanup
+  fi
+
+  log_debug "Startup optimizations completed"
+}
+
+# Function: display_system_status
+# Description: Display system status for debug/status commands
+# Parameters:
+#   $1 - command being executed
+display_system_status() {
+  local command="$1"
+
+  # Only display for status, help, or debug commands
   if [[ "$command" == "status" || "$command" == "help" || "$command" == "-d" || "$command" == "--debug" ]]; then
-    log_debug "System Status:"
-    log_debug "- Log Level: $(logging_get_level)"
-    log_debug "- Config Namespace: $(config_get_value 'namespace' 'config')"
+    log_debug "=== ServerSentry v2 System Status ==="
+    log_debug "Base directory: $BASE_DIR"
+    log_debug "Log level: $(logging_get_level)"
+    log_debug "Configuration loaded from: $(config_get_value 'config_file' 'default')"
+    log_debug "Config namespace: $(config_get_value 'namespace' 'config')"
 
     # Display enabled plugins (handle array properly)
     local enabled_plugins
-    enabled_plugins=$(config_get_array 'plugins.enabled' | tr '\n' ',' | sed 's/,$//')
+    enabled_plugins=$(config_get_array 'plugins.enabled' 2>/dev/null | tr '\n' ',' | sed 's/,$//')
     if [[ -n "$enabled_plugins" ]]; then
-      log_debug "- Plugins Enabled: $enabled_plugins"
+      log_debug "Plugins enabled: $enabled_plugins"
     else
-      log_debug "- Plugins Enabled: none"
+      log_debug "Plugins enabled: none"
     fi
 
-    log_debug "- Notifications Enabled: $(config_get_value 'notifications.enabled' 'false')"
+    log_debug "Notifications enabled: $(config_get_value 'notifications.enabled' 'false')"
+    log_debug "System initialized successfully"
   fi
+}
+
+# Main function with enhanced error handling and proper initialization
+main() {
+  log_debug "Starting ServerSentry v2"
+
+  # Initialize core system components in proper order
+  if ! init_core_system; then
+    echo "FATAL: Core system initialization failed" >&2
+    exit 1
+  fi
+
+  # Initialize plugin system
+  if ! init_plugin_system; then
+    log_error "Plugin system initialization failed"
+    exit 1
+  fi
+
+  # Initialize notification system (non-fatal)
+  if ! init_notification_system; then
+    log_info "Continuing without notification support"
+  fi
+
+  # Initialize UI system
+  if ! init_ui_system; then
+    log_error "UI system initialization failed"
+    exit 1
+  fi
+
+  # Run startup optimizations
+  run_startup_optimizations
+
+  # Display system status for relevant commands
+  local command="${1:-status}"
+  display_system_status "$command"
 
   # Process command line arguments
   if ! process_commands "$@"; then
@@ -102,23 +221,65 @@ main() {
   log_debug "ServerSentry v2 finished successfully"
 }
 
-# Trap for cleanup
+# Function: cleanup
+# Description: Cleanup function called on exit
 cleanup() {
   local exit_code=$?
-  log_debug "Performing cleanup (exit code: $exit_code)"
 
-  # Add any cleanup operations here
+  if [[ "${CURRENT_LOG_LEVEL:-1}" -le 0 ]]; then # DEBUG level
+    log_debug "Performing cleanup (exit code: $exit_code)"
+  fi
+
+  # Cleanup operations
+  if declare -f util_command_cache_cleanup >/dev/null 2>&1; then
+    util_command_cache_cleanup >/dev/null 2>&1
+  fi
+
+  # Log exit status
   if [[ "$exit_code" -ne 0 ]]; then
-    log_error "ServerSentry exited with error code: $exit_code"
+    if declare -f log_error >/dev/null 2>&1; then
+      log_error "ServerSentry exited with error code: $exit_code"
+    else
+      echo "ERROR: ServerSentry exited with error code: $exit_code" >&2
+    fi
   fi
 
   exit "$exit_code"
 }
 
+# Function: handle_signals
+# Description: Handle various signals gracefully
+handle_signals() {
+  case "$1" in
+  "INT")
+    if declare -f log_warning >/dev/null 2>&1; then
+      log_warning "Received SIGINT, shutting down gracefully..."
+    fi
+    exit 130
+    ;;
+  "TERM")
+    if declare -f log_warning >/dev/null 2>&1; then
+      log_warning "Received SIGTERM, shutting down gracefully..."
+    fi
+    exit 143
+    ;;
+  "HUP")
+    if declare -f log_info >/dev/null 2>&1; then
+      log_info "Received SIGHUP, reloading configuration..."
+    fi
+    # Trigger configuration reload if available
+    if declare -f config_load >/dev/null 2>&1; then
+      config_load
+    fi
+    ;;
+  esac
+}
+
 # Set up signal handlers
 trap cleanup EXIT
-trap 'log_warning "Received SIGINT, shutting down..."; exit 130' INT
-trap 'log_warning "Received SIGTERM, shutting down..."; exit 143' TERM
+trap 'handle_signals INT' INT
+trap 'handle_signals TERM' TERM
+trap 'handle_signals HUP' HUP
 
 # Run the main function with all arguments
 main "$@"

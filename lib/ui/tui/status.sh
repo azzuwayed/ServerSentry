@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # TUI status and check module
 
 source "$(dirname "$0")/utils.sh"

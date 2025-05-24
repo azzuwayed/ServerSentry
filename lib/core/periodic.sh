@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Periodic Monitoring
 #
@@ -118,7 +118,7 @@ update_last_alert_time() {
 
   if [ -f "$PERIODIC_STATE_FILE" ] && [ -s "$PERIODIC_STATE_FILE" ]; then
     # Try to use jq if available
-    if command_exists jq; then
+    if util_command_exists jq; then
       jq --arg plugin "$plugin_name" --arg time "$timestamp" \
         '.last_alerts[$plugin] = $time' \
         "$PERIODIC_STATE_FILE" >"$temp_file"
@@ -156,7 +156,7 @@ is_in_silence_period() {
 
   if [ -f "$PERIODIC_STATE_FILE" ] && [ -s "$PERIODIC_STATE_FILE" ]; then
     # Try to use jq if available
-    if command_exists jq; then
+    if util_command_exists jq; then
       last_alert_time=$(jq -r ".last_alerts.\"$plugin_name\" // 0" "$PERIODIC_STATE_FILE")
     else
       # Simple grep-based approach if jq is not available
@@ -287,7 +287,7 @@ should_generate_report() {
 
   if [ -f "$PERIODIC_STATE_FILE" ] && [ -s "$PERIODIC_STATE_FILE" ]; then
     # Try to use jq if available
-    if compat_command_exists jq; then
+    if util_command_exists jq; then
       last_report_time=$(jq -r ".last_report // 0" "$PERIODIC_STATE_FILE")
     else
       # Simple grep-based approach if jq is not available
@@ -310,7 +310,7 @@ should_generate_report() {
 
     if [ -f "$PERIODIC_STATE_FILE" ] && [ -s "$PERIODIC_STATE_FILE" ]; then
       # Try to use jq if available
-      if compat_command_exists jq; then
+      if util_command_exists jq; then
         jq --arg time "$current_time" \
           '. + {"last_report": $time}' \
           "$PERIODIC_STATE_FILE" >"$temp_file"
@@ -389,7 +389,7 @@ show_periodic_status() {
 
   if [ -f "$PERIODIC_STATE_FILE" ] && [ -s "$PERIODIC_STATE_FILE" ]; then
     # Try to use jq if available
-    if compat_command_exists jq; then
+    if util_command_exists jq; then
       last_report_time=$(jq -r ".last_report // 0" "$PERIODIC_STATE_FILE")
     else
       # Simple grep-based approach if jq is not available

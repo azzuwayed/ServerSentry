@@ -30,7 +30,7 @@ touch lib/notifications/your_provider/your_provider.sh
 Edit the file to implement the required functions:
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Your Notification Provider
 #

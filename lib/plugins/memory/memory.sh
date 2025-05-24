@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Memory Monitoring Plugin
 #
@@ -119,7 +119,7 @@ memory_plugin_check() {
 
         free_memory=$((total_memory - used_memory))
 
-      elif compat_command_exists free; then
+      elif util_command_exists free; then
         # Fallback to free command
         local mem_info
         mem_info=$(free -b)
@@ -141,7 +141,7 @@ memory_plugin_check() {
 
     macos)
       # macOS-style - use sysctl and vm_stat
-      if compat_command_exists vm_stat && compat_command_exists sysctl; then
+      if util_command_exists vm_stat && util_command_exists sysctl; then
         # Get page size and memory stats
         local page_size
         page_size=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Disk Monitoring Plugin
 #
@@ -67,15 +67,15 @@ disk_plugin_check() {
   local all_used=()
   local all_avail=()
 
-  # Check if df command exists using compatibility layer
-  if ! compat_command_exists df; then
+  # Check if df command exists using unified command utility
+  if ! util_command_exists df; then
     status_code=3
-    status_message="Cannot determine disk usage: 'df' command not found"
+    status_message="Cannot check disk usage: 'df' command not found"
 
     # Create empty results
     local timestamp
-    if compat_command_exists compat_date; then
-      timestamp=$(compat_date --iso-8601=seconds)
+    if declare -f compat_date_iso >/dev/null 2>&1; then
+      timestamp=$(compat_date_iso)
     else
       timestamp=$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date)
     fi
@@ -133,8 +133,8 @@ EOF
     status_message="Cannot determine disk usage: no output from df command"
 
     local timestamp
-    if compat_command_exists compat_date; then
-      timestamp=$(compat_date --iso-8601=seconds)
+    if declare -f compat_date_iso >/dev/null 2>&1; then
+      timestamp=$(compat_date_iso)
     else
       timestamp=$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date)
     fi
@@ -251,7 +251,11 @@ EOF
 
   # Get timestamp
   local timestamp
-  timestamp=$(get_timestamp)
+  if declare -f compat_date_iso >/dev/null 2>&1; then
+    timestamp=$(compat_date_iso)
+  else
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  fi
 
   # Create JSON for mounts
   local mounts_json=""

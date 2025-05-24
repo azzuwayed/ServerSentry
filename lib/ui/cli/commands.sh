@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - CLI Commands
 #
@@ -86,7 +86,7 @@ process_commands() {
     # Unknown option/command
     *)
       if [[ "$1" == -* ]]; then
-        log_error "Unknown option: $1"
+        log_error "Unknown option: $1" "cli"
         show_help
         exit 1
       else
@@ -161,7 +161,7 @@ process_commands() {
     cmd_logging "$@"
     ;;
   *)
-    log_error "Unknown command: $command"
+    log_error "Unknown command: $command" "cli"
     show_help
     exit 1
     ;;
@@ -177,7 +177,7 @@ cmd_status() {
 
   print_header "ServerSentry Status" 60
 
-  log_info "Checking system status..." "ui"
+  log_info "Checking system status..." "cli"
 
   # Check if monitoring is running
   if is_monitoring_running; then
@@ -189,12 +189,12 @@ cmd_status() {
   echo ""
 
   # Run all plugin checks
-  log_debug "Running all plugin checks" "ui"
+  log_debug "Running all plugin checks" "cli"
   local results
   results=$(run_all_plugin_checks)
 
   # Parse and display results with colors
-  if command -v jq >/dev/null 2>&1 && [[ -n "$results" ]]; then
+  if util_command_exists jq && [[ -n "$results" ]]; then
     echo "$results" | jq -r '.[] | "\(.plugin)|\(.status_code)|\(.status_message)|\(.metrics.usage_percent // "N/A")|\(.metrics.threshold // "N/A")"' | while IFS='|' read -r plugin status_code message value threshold; do
       if [[ -n "$plugin" ]]; then
         case "$status_code" in
@@ -224,6 +224,7 @@ cmd_status() {
     done
   else
     # Fallback display without jq
+    log_warning "jq not available, using fallback display" "cli"
     echo "$results"
   fi
 
@@ -233,12 +234,12 @@ cmd_status() {
 
 # Command: start
 cmd_start() {
-  log_info "Starting monitoring..." "ui"
+  log_info "Starting monitoring..." "cli"
   log_audit "start_monitoring" "${USER:-unknown}" "User initiated monitoring start via CLI"
 
   # Check if already running
   if is_monitoring_running; then
-    log_warning "Monitoring is already running" "ui"
+    log_warning "Monitoring is already running" "cli"
     return 0
   fi
 
@@ -246,18 +247,18 @@ cmd_start() {
   nohup "$BASE_DIR/bin/serversentry" monitor >/dev/null 2>&1 &
   echo $! >"${BASE_DIR}/serversentry.pid"
 
-  log_info "Monitoring started with PID $(cat "${BASE_DIR}/serversentry.pid")" "ui"
+  log_info "Monitoring started with PID $(cat "${BASE_DIR}/serversentry.pid")" "cli"
   log_audit "monitoring_started" "${USER:-unknown}" "PID=$(cat "${BASE_DIR}/serversentry.pid" 2>/dev/null)"
 }
 
 # Command: stop
 cmd_stop() {
-  log_info "Stopping monitoring..." "ui"
+  log_info "Stopping monitoring..." "cli"
   log_audit "stop_monitoring" "${USER:-unknown}" "User initiated monitoring stop via CLI"
 
   # Check if running
   if ! is_monitoring_running; then
-    log_warning "Monitoring is not running" "ui"
+    log_warning "Monitoring is not running" "cli"
     return 0
   fi
 
@@ -269,10 +270,10 @@ cmd_stop() {
     # Kill the process
     kill "$pid" 2>/dev/null
     rm -f "${BASE_DIR}/serversentry.pid"
-    log_info "Monitoring stopped" "ui"
+    log_info "Monitoring stopped" "cli"
     log_audit "monitoring_stopped" "${USER:-unknown}" "PID=$pid"
   else
-    log_error "Could not find monitoring PID" "ui"
+    log_error "Could not find monitoring PID" "cli"
     return 1
   fi
 }
@@ -283,17 +284,25 @@ cmd_check() {
 
   if [ -z "$plugin_name" ]; then
     # Check all plugins
-    log_info "Running all plugin checks..." "ui"
+    log_info "Running all plugin checks..." "cli"
     log_audit "check_all_plugins" "${USER:-unknown}" "User requested all plugin checks"
-    run_all_plugin_checks | jq
+    if util_command_exists jq; then
+      run_all_plugin_checks | jq
+    else
+      run_all_plugin_checks
+    fi
   else
     # Check specific plugin
-    log_info "Running check for plugin: $plugin_name" "ui"
+    log_info "Running check for plugin: $plugin_name" "cli"
     log_audit "check_plugin" "${USER:-unknown}" "plugin=$plugin_name"
     if is_plugin_registered "$plugin_name"; then
-      run_plugin_check "$plugin_name" | jq
+      if util_command_exists jq; then
+        run_plugin_check "$plugin_name" | jq
+      else
+        run_plugin_check "$plugin_name"
+      fi
     else
-      log_error "Plugin not found: $plugin_name" "ui"
+      log_error "Plugin not found: $plugin_name" "cli"
       echo "Available plugins:"
       list_plugins
       return 1
@@ -303,13 +312,13 @@ cmd_check() {
 
 # Command: list
 cmd_list() {
-  log_info "Listing available plugins..." "ui"
+  log_info "Listing available plugins..." "cli"
   list_plugins
 }
 
 # Command: configure
 cmd_configure() {
-  log_info "Opening configuration..." "ui"
+  log_info "Opening configuration..." "cli"
   log_audit "edit_config" "${USER:-unknown}" "User opened configuration file for editing"
 
   # Open with default editor
@@ -335,12 +344,12 @@ cmd_logs() {
     ;;
   clear)
     # Clear logs
-    log_warning "Clearing logs..." "ui"
+    log_warning "Clearing logs..." "cli"
     log_audit "clear_logs" "${USER:-unknown}" "User cleared log file"
     >"$LOG_FILE"
     ;;
   *)
-    log_error "Unknown logs subcommand: $subcommand" "ui"
+    log_error "Unknown logs subcommand: $subcommand" "cli"
     echo "Available subcommands: view, rotate, clear"
     return 1
     ;;
@@ -370,7 +379,7 @@ is_monitoring_running() {
 }
 
 cmd_tui() {
-  log_info "Launching TUI..."
+  log_info "Launching TUI..." "cli"
   "$BASE_DIR/lib/ui/tui/tui.sh"
 }
 
@@ -505,7 +514,7 @@ cmd_update_threshold() {
   fi
   # Update in YAML config (serversentry.yaml)
   # Use yq if available, else sed
-  if command -v yq >/dev/null 2>&1; then
+  if util_command_exists yq; then
     yq -i ".${name} = ${value}" "$MAIN_CONFIG"
     echo "Updated $name to $value in $MAIN_CONFIG"
   else
@@ -1006,7 +1015,7 @@ cmd_diagnostics() {
       else
         memory_usage=0
       fi
-    elif command -v free >/dev/null 2>&1; then
+    elif util_command_exists free; then
       # Linux
       memory_usage=$(free | awk 'NR==2{printf "%.0f", $3*100/$2}')
     else
@@ -1032,7 +1041,7 @@ cmd_diagnostics() {
     local missing_cmds=()
     local required_commands=("ps" "grep" "awk" "sed" "jq")
     for cmd in "${required_commands[@]}"; do
-      if ! command -v "$cmd" >/dev/null 2>&1; then
+      if ! util_command_exists "$cmd"; then
         missing_cmds+=("$cmd")
       fi
     done
@@ -1112,7 +1121,7 @@ cmd_diagnostics() {
       echo "Viewing diagnostic report: $(basename "$report_file")"
       echo "========================================"
 
-      if command -v jq >/dev/null 2>&1; then
+      if util_command_exists jq; then
         # Pretty print with jq if available
         jq '.' "$report_file"
       else

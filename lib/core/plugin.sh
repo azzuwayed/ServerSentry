@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Plugin Management
 #
@@ -463,7 +463,7 @@ plugin_run_check() {
   fi
 
   # Process result for notifications if needed
-  if [[ "$send_notifications" == "true" ]] && command_exists jq; then
+  if [[ "$send_notifications" == "true" ]] && util_command_exists jq; then
     # Extract status information from the JSON result
     local status_code
     status_code=$(util_json_get_value "$result" "status_code")

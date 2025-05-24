@@ -1,350 +1,402 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
-# ServerSentry v2 - CLI Colors and Output Enhancement
+# ServerSentry v2 - CLI Colors and UI Utilities
 #
-# This module provides colorized output and enhanced CLI features
+# This module provides color codes, formatting functions, and UI utilities
+# for command-line interface components
 
-# Color definitions
-if [ -t 1 ] && [ "${TERM:-}" != "dumb" ] && [ "${NO_COLOR:-}" = "" ]; then
-  # Terminal supports colors
-  export RED='\033[0;31m'
-  export GREEN='\033[0;32m'
-  export YELLOW='\033[1;33m'
-  export BLUE='\033[0;34m'
-  export PURPLE='\033[0;35m'
-  export CYAN='\033[0;36m'
-  export WHITE='\033[1;37m'
-  export GRAY='\033[0;37m'
-  export BOLD='\033[1m'
-  export DIM='\033[2m'
-  export UNDERLINE='\033[4m'
-  export NC='\033[0m' # No Color
-
-  # Status colors
-  export COLOR_OK="$GREEN"
-  export COLOR_WARNING="$YELLOW"
-  export COLOR_ERROR="$RED"
-  export COLOR_INFO="$CYAN"
-  export COLOR_DEBUG="$GRAY"
-else
-  # No color support
-  export RED=''
-  export GREEN=''
-  export YELLOW=''
-  export BLUE=''
-  export PURPLE=''
-  export CYAN=''
-  export WHITE=''
-  export GRAY=''
-  export BOLD=''
-  export DIM=''
-  export UNDERLINE=''
-  export NC=''
-
-  export COLOR_OK=''
-  export COLOR_WARNING=''
-  export COLOR_ERROR=''
-  export COLOR_INFO=''
-  export COLOR_DEBUG=''
+# Source core utilities for command checking
+if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils.sh"
 fi
 
-# Print colored message
-print_color() {
-  local color="$1"
-  local message="$2"
-  echo -e "${color}${message}${NC}"
+# Color detection
+init_colors() {
+  # Check if terminal supports colors
+  if [[ -t 1 ]] && util_command_exists tput; then
+    local colors
+    colors=$(tput colors 2>/dev/null) || colors=0
+    if [[ $colors -ge 8 ]]; then
+      COLOR_SUPPORT=true
+    else
+      COLOR_SUPPORT=false
+    fi
+  else
+    COLOR_SUPPORT=false
+  fi
+
+  # Override color support if NO_COLOR environment variable is set
+  if [[ -n "${NO_COLOR:-}" ]]; then
+    COLOR_SUPPORT=false
+  fi
+
+  # Initialize color codes based on support
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    # Text formatting
+    RESET="$(tput sgr0 2>/dev/null)"
+    BOLD="$(tput bold 2>/dev/null)"
+    DIM="$(tput dim 2>/dev/null)"
+    UNDERLINE="$(tput smul 2>/dev/null)"
+    ITALIC="$(tput sitm 2>/dev/null)"
+    BLINK="$(tput blink 2>/dev/null)"
+    REVERSE="$(tput rev 2>/dev/null)"
+
+    # Standard colors
+    BLACK="$(tput setaf 0 2>/dev/null)"
+    RED="$(tput setaf 1 2>/dev/null)"
+    GREEN="$(tput setaf 2 2>/dev/null)"
+    YELLOW="$(tput setaf 3 2>/dev/null)"
+    BLUE="$(tput setaf 4 2>/dev/null)"
+    MAGENTA="$(tput setaf 5 2>/dev/null)"
+    CYAN="$(tput setaf 6 2>/dev/null)"
+    WHITE="$(tput setaf 7 2>/dev/null)"
+
+    # Bright colors (if supported)
+    BRIGHT_BLACK="$(tput setaf 8 2>/dev/null)"
+    BRIGHT_RED="$(tput setaf 9 2>/dev/null)"
+    BRIGHT_GREEN="$(tput setaf 10 2>/dev/null)"
+    BRIGHT_YELLOW="$(tput setaf 11 2>/dev/null)"
+    BRIGHT_BLUE="$(tput setaf 12 2>/dev/null)"
+    BRIGHT_MAGENTA="$(tput setaf 13 2>/dev/null)"
+    BRIGHT_CYAN="$(tput setaf 14 2>/dev/null)"
+    BRIGHT_WHITE="$(tput setaf 15 2>/dev/null)"
+
+    # Background colors
+    BG_BLACK="$(tput setab 0 2>/dev/null)"
+    BG_RED="$(tput setab 1 2>/dev/null)"
+    BG_GREEN="$(tput setab 2 2>/dev/null)"
+    BG_YELLOW="$(tput setab 3 2>/dev/null)"
+    BG_BLUE="$(tput setab 4 2>/dev/null)"
+    BG_MAGENTA="$(tput setab 5 2>/dev/null)"
+    BG_CYAN="$(tput setab 6 2>/dev/null)"
+    BG_WHITE="$(tput setab 7 2>/dev/null)"
+  else
+    # No color support - set all to empty
+    RESET="" BOLD="" DIM="" UNDERLINE="" ITALIC="" BLINK="" REVERSE=""
+    BLACK="" RED="" GREEN="" YELLOW="" BLUE="" MAGENTA="" CYAN="" WHITE=""
+    BRIGHT_BLACK="" BRIGHT_RED="" BRIGHT_GREEN="" BRIGHT_YELLOW=""
+    BRIGHT_BLUE="" BRIGHT_MAGENTA="" BRIGHT_CYAN="" BRIGHT_WHITE=""
+    BG_BLACK="" BG_RED="" BG_GREEN="" BG_YELLOW=""
+    BG_BLUE="" BG_MAGENTA="" BG_CYAN="" BG_WHITE=""
+  fi
+
+  # Semantic colors for consistent UI
+  SUCCESS_COLOR="$GREEN"
+  WARNING_COLOR="$YELLOW"
+  ERROR_COLOR="$RED"
+  INFO_COLOR="$BLUE"
+  DEBUG_COLOR="$MAGENTA"
+  CRITICAL_COLOR="$BRIGHT_RED"
+
+  # Status symbols
+  if util_command_exists printf; then
+    # Use Unicode symbols if printf supports them
+    SYMBOL_OK="✅"
+    SYMBOL_WARNING="⚠️"
+    SYMBOL_ERROR="❌"
+    SYMBOL_INFO="ℹ️"
+    SYMBOL_DEBUG="🔍"
+    SYMBOL_CRITICAL="🚨"
+    SYMBOL_RUNNING="🟢"
+    SYMBOL_STOPPED="🔴"
+    SYMBOL_UNKNOWN="❓"
+  else
+    # Fallback to ASCII symbols
+    SYMBOL_OK="[OK]"
+    SYMBOL_WARNING="[WARN]"
+    SYMBOL_ERROR="[ERR]"
+    SYMBOL_INFO="[INFO]"
+    SYMBOL_DEBUG="[DBG]"
+    SYMBOL_CRITICAL="[CRIT]"
+    SYMBOL_RUNNING="[RUN]"
+    SYMBOL_STOPPED="[STOP]"
+    SYMBOL_UNKNOWN="[?]"
+  fi
+
+  # Export color variables
+  export COLOR_SUPPORT RESET BOLD DIM UNDERLINE ITALIC BLINK REVERSE
+  export BLACK RED GREEN YELLOW BLUE MAGENTA CYAN WHITE
+  export BRIGHT_BLACK BRIGHT_RED BRIGHT_GREEN BRIGHT_YELLOW
+  export BRIGHT_BLUE BRIGHT_MAGENTA BRIGHT_CYAN BRIGHT_WHITE
+  export BG_BLACK BG_RED BG_GREEN BG_YELLOW BG_BLUE BG_MAGENTA BG_CYAN BG_WHITE
+  export SUCCESS_COLOR WARNING_COLOR ERROR_COLOR INFO_COLOR DEBUG_COLOR CRITICAL_COLOR
+  export SYMBOL_OK SYMBOL_WARNING SYMBOL_ERROR SYMBOL_INFO SYMBOL_DEBUG SYMBOL_CRITICAL
+  export SYMBOL_RUNNING SYMBOL_STOPPED SYMBOL_UNKNOWN
 }
 
-# Print status messages with icons and colors
+# Print functions with color support
+print_success() {
+  echo "${SUCCESS_COLOR}${BOLD}$*${RESET}"
+}
+
+print_warning() {
+  echo "${WARNING_COLOR}${BOLD}$*${RESET}"
+}
+
+print_error() {
+  echo "${ERROR_COLOR}${BOLD}$*${RESET}"
+}
+
+print_info() {
+  echo "${INFO_COLOR}$*${RESET}"
+}
+
+print_debug() {
+  echo "${DEBUG_COLOR}$*${RESET}"
+}
+
+print_critical() {
+  echo "${CRITICAL_COLOR}${BOLD}$*${RESET}"
+}
+
+# Status printing functions
 print_status() {
   local status="$1"
-  local message="$2"
+  shift
+  local message="$*"
 
   case "$status" in
   "ok" | "success")
-    echo -e "${COLOR_OK}✅ ${message}${NC}"
+    echo "${SUCCESS_COLOR}${SYMBOL_OK}${RESET} $message"
     ;;
   "warning" | "warn")
-    echo -e "${COLOR_WARNING}⚠️  ${message}${NC}"
+    echo "${WARNING_COLOR}${SYMBOL_WARNING}${RESET} $message"
     ;;
-  "error" | "fail")
-    echo -e "${COLOR_ERROR}❌ ${message}${NC}"
+  "error" | "err")
+    echo "${ERROR_COLOR}${SYMBOL_ERROR}${RESET} $message"
     ;;
   "info")
-    echo -e "${COLOR_INFO}ℹ️  ${message}${NC}"
+    echo "${INFO_COLOR}${SYMBOL_INFO}${RESET} $message"
     ;;
   "debug")
-    echo -e "${COLOR_DEBUG}🔍 ${message}${NC}"
+    echo "${DEBUG_COLOR}${SYMBOL_DEBUG}${RESET} $message"
+    ;;
+  "critical" | "crit")
+    echo "${CRITICAL_COLOR}${SYMBOL_CRITICAL}${RESET} $message"
+    ;;
+  "running")
+    echo "${SUCCESS_COLOR}${SYMBOL_RUNNING}${RESET} $message"
+    ;;
+  "stopped")
+    echo "${ERROR_COLOR}${SYMBOL_STOPPED}${RESET} $message"
     ;;
   *)
-    echo -e "${message}"
+    echo "${BLUE}${SYMBOL_UNKNOWN}${RESET} $message"
     ;;
   esac
 }
 
-# Create a visual progress bar
+# Header printing function
+print_header() {
+  local text="$1"
+  local width="${2:-60}"
+
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    local separator
+    separator=$(printf "%*s" "$width" | tr ' ' '=')
+    echo "${BOLD}${BLUE}$separator${RESET}"
+    echo "${BOLD}${BLUE}$text${RESET}"
+    echo "${BOLD}${BLUE}$separator${RESET}"
+  else
+    local separator
+    separator=$(printf "%*s" "$width" | tr ' ' '=')
+    echo "$separator"
+    echo "$text"
+    echo "$separator"
+  fi
+}
+
+# Separator function
+print_separator() {
+  local width="${1:-60}"
+  local char="${2:--}"
+
+  local separator
+  separator=$(printf "%*s" "$width" | tr " " "$char")
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo "${DIM}$separator${RESET}"
+  else
+    echo "$separator"
+  fi
+}
+
+# Progress bar function
 create_progress_bar() {
   local current="$1"
   local total="$2"
   local width="${3:-30}"
-  local fill_char="${4:-█}"
-  local empty_char="${5:-░}"
+  local label="${4:-Progress}"
 
-  local percentage=$((current * 100 / total))
-  local filled=$((current * width / total))
-  local empty=$((width - filled))
+  local percentage=0
+  if [[ "$total" -gt 0 ]]; then
+    if util_command_exists bc; then
+      percentage=$(echo "scale=0; $current * 100 / $total" | bc)
+    else
+      percentage=$((current * 100 / total))
+    fi
+  fi
 
-  local bar=""
-  for ((i = 0; i < filled; i++)); do
-    bar+="$fill_char"
-  done
-  for ((i = 0; i < empty; i++)); do
-    bar+="$empty_char"
-  done
+  local filled_width=$((percentage * width / 100))
+  local empty_width=$((width - filled_width))
 
-  echo -e "${BLUE}[${bar}]${NC} ${percentage}%"
+  local filled
+  filled=$(printf "%*s" "$filled_width" | tr ' ' '█')
+  local empty
+  empty=$(printf "%*s" "$empty_width" | tr ' ' '░')
+
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    printf "%s: [${GREEN}%s${DIM}%s${RESET}] %3d%% (%d/%d)\n" \
+      "$label" "$filled" "$empty" "$percentage" "$current" "$total"
+  else
+    printf "%s: [%s%s] %3d%% (%d/%d)\n" \
+      "$label" "$filled" "$empty" "$percentage" "$current" "$total"
+  fi
 }
 
-# Create a visual metric bar (like for CPU/Memory usage)
+# Metric bar for showing usage vs threshold
 create_metric_bar() {
   local value="$1"
   local threshold="$2"
-  local label="$3"
-  local width="${4:-20}"
+  local label="${3:-Metric}"
+  local width="${4:-30}"
 
-  # Handle floating point values
-  local value_int
-  if command -v bc >/dev/null 2>&1; then
-    value_int=$(echo "$value / 1" | bc)
-  else
-    # Fallback: convert float to int by removing decimal
-    value_int=${value%.*}
+  # Ensure numeric values
+  if ! [[ "$value" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! [[ "$threshold" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "$label: Invalid numeric values (value=$value, threshold=$threshold)"
+    return 1
   fi
 
-  local filled=$((value_int * width / 100))
-  local empty=$((width - filled))
+  local percentage
+  if util_command_exists bc; then
+    percentage=$(echo "scale=0; $value" | bc)
+  else
+    percentage=$(echo "$value" | cut -d. -f1)
+  fi
 
   # Determine color based on threshold
-  local color
-  if command -v bc >/dev/null 2>&1; then
-    if [[ $(echo "$value >= $threshold" | bc) -eq 1 ]]; then
-      color="$RED"
-    elif [[ $(echo "$value >= $threshold - 20" | bc) -eq 1 ]]; then
-      color="$YELLOW"
-    else
-      color="$GREEN"
+  local bar_color="$GREEN"
+  if [[ "$percentage" -ge "$threshold" ]]; then
+    bar_color="$RED"
+  elif [[ "$percentage" -ge $((threshold * 80 / 100)) ]]; then
+    bar_color="$YELLOW"
+  fi
+
+  local filled_width=$((percentage * width / 100))
+  local threshold_pos=$((threshold * width / 100))
+  local empty_width=$((width - filled_width))
+
+  local filled
+  filled=$(printf "%*s" "$filled_width" | tr ' ' '█')
+  local empty
+  empty=$(printf "%*s" "$empty_width" | tr ' ' '░')
+
+  # Create threshold marker
+  local bar="$filled$empty"
+  if [[ "$threshold_pos" -le "$width" ]]; then
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      # Insert threshold marker at appropriate position
+      local before_threshold="${bar:0:$threshold_pos}"
+      local after_threshold="${bar:$((threshold_pos + 1))}"
+      bar="${before_threshold}${RED}|${RESET}${after_threshold}"
     fi
+  fi
+
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    printf "%s: [${bar_color}%s${RESET}] %.1f%% (threshold: %.1f%%)\n" \
+      "$label" "$bar" "$value" "$threshold"
   else
-    # Fallback comparison for systems without bc
-    if [[ $value_int -ge $threshold ]]; then
-      color="$RED"
-    elif [[ $value_int -ge $((threshold - 20)) ]]; then
-      color="$YELLOW"
-    else
-      color="$GREEN"
-    fi
+    printf "%s: [%s] %.1f%% (threshold: %.1f%%)\n" \
+      "$label" "$bar" "$value" "$threshold"
+  fi
+}
+
+# Table printing functions
+print_table_header() {
+  local -a headers=("$@")
+  local separator=""
+
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    printf "${BOLD}${BLUE}"
   fi
 
-  local bar=""
-  for ((i = 0; i < filled; i++)); do
-    bar+="█"
+  for header in "${headers[@]}"; do
+    printf "%-20s" "$header"
+    separator+="--------------------"
   done
-  for ((i = 0; i < empty; i++)); do
-    bar+="░"
-  done
+  printf "\n"
 
-  echo -e "${label} ${color}[${bar}]${NC} ${value}%"
-}
-
-# Print a header with decorative border
-print_header() {
-  local title="$1"
-  local width="${2:-50}"
-  local char="${3:-=}"
-
-  local padding=$(((width - ${#title} - 2) / 2))
-  local border=""
-  local title_line=""
-
-  # Create border
-  for ((i = 0; i < width; i++)); do
-    border+="$char"
-  done
-
-  # Create title line
-  title_line="$char"
-  for ((i = 0; i < padding; i++)); do
-    title_line+=" "
-  done
-  title_line+="$title"
-  for ((i = 0; i < padding; i++)); do
-    title_line+=" "
-  done
-  # Add extra space if title length is odd
-  if [ $(((width - ${#title}) % 2)) -eq 1 ]; then
-    title_line+=" "
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    printf "${RESET}${DIM}%s${RESET}\n" "$separator"
+  else
+    printf "%s\n" "$separator"
   fi
-  title_line+="$char"
-
-  echo -e "${CYAN}${border}${NC}"
-  echo -e "${CYAN}${title_line}${NC}"
-  echo -e "${CYAN}${border}${NC}"
 }
 
-# Print a simple separator line
-print_separator() {
-  local char="${1:--}"
-  local width="${2:-50}"
-  local line=""
-
-  for ((i = 0; i < width; i++)); do
-    line+="$char"
+print_table_row() {
+  local -a columns=("$@")
+  for column in "${columns[@]}"; do
+    printf "%-20s" "$column"
   done
-
-  echo -e "${GRAY}${line}${NC}"
+  printf "\n"
 }
 
-# Show a spinner animation
+# Spinner for long-running operations
 show_spinner() {
   local pid="$1"
   local message="${2:-Working...}"
   local delay=0.1
   local spinstr='|/-\'
 
-  while [ "$(ps a | awk '{print $1}' | grep "$pid")" ]; do
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    printf "${BLUE}%s${RESET} " "$message"
+  else
+    printf "%s " "$message"
+  fi
+
+  while ps -p "$pid" >/dev/null 2>&1; do
     local temp=${spinstr#?}
-    printf "\r${BLUE}%c${NC} %s" "$spinstr" "$message"
-    local spinstr=$temp${spinstr%"$temp"}
-    sleep $delay
-  done
-  printf "\r%*s\r" $((${#message} + 3)) ""
-}
-
-# Colorize metric values based on thresholds
-colorize_metric() {
-  local value="$1"
-  local threshold="$2"
-  local label="$3"
-  local unit="${4:-%}"
-
-  local color
-  local icon
-
-  if [ "$value" -ge "$threshold" ]; then
-    color="$RED"
-    icon="🔴"
-  elif [ "$value" -ge $((threshold - 20)) ]; then
-    color="$YELLOW"
-    icon="🟡"
-  else
-    color="$GREEN"
-    icon="🟢"
-  fi
-
-  echo -e "${icon} ${label} ${color}${value}${unit}${NC}"
-}
-
-# Show a confirmation prompt with colors
-confirm_prompt() {
-  local message="$1"
-  local default="${2:-n}"
-  local prompt
-
-  if [ "$default" = "y" ]; then
-    prompt="${GREEN}[Y/n]${NC}"
-  else
-    prompt="${RED}[y/N]${NC}"
-  fi
-
-  echo -e "${YELLOW}${message}${NC} $prompt"
-  read -r response
-
-  case "$response" in
-  [yY] | [yY][eE][sS])
-    return 0
-    ;;
-  [nN] | [nN][oO])
-    return 1
-    ;;
-  "")
-    if [ "$default" = "y" ]; then
-      return 0
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      printf "${YELLOW}[%c]${RESET}" "$spinstr"
     else
-      return 1
+      printf "[%c]" "$spinstr"
     fi
-    ;;
-  *)
-    echo -e "${RED}Please answer yes or no.${NC}"
-    confirm_prompt "$message" "$default"
-    ;;
-  esac
+    spinstr=$temp${spinstr%"$temp"}
+    sleep $delay
+    printf "\b\b\b"
+  done
+  printf "   \b\b\b"
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    printf "${GREEN}Done!${RESET}\n"
+  else
+    printf "Done!\n"
+  fi
 }
 
-# Print a table with headers and rows
-print_table() {
-  local -n headers_ref=$1
-  local -n rows_ref=$2
-  local separator="${3:-|}"
+# Box drawing for important messages
+print_box() {
+  local text="$1"
+  local width="${2:-60}"
+  local padding=2
 
-  # Calculate column widths
-  local -a col_widths
-  for ((i = 0; i < ${#headers_ref[@]}; i++)); do
-    col_widths[i]=${#headers_ref[i]}
-  done
+  local content_width=$((width - 2 * padding - 2))
+  local top_bottom
+  top_bottom=$(printf "%*s" "$width" | tr ' ' '=')
 
-  # Check row widths
-  for row in "${rows_ref[@]}"; do
-    IFS='|' read -ra COLS <<<"$row"
-    for ((i = 0; i < ${#COLS[@]}; i++)); do
-      if [ ${#COLS[i]} -gt "${col_widths[i]:-0}" ]; then
-        col_widths[i]=${#COLS[i]}
-      fi
-    done
-  done
-
-  # Print header
-  local header_line=""
-  local separator_line=""
-  for ((i = 0; i < ${#headers_ref[@]}; i++)); do
-    printf "${BOLD}%-${col_widths[i]}s${NC}" "${headers_ref[i]}"
-    if [ $i -lt $((${#headers_ref[@]} - 1)) ]; then
-      printf " $separator "
-    fi
-
-    # Build separator line
-    for ((j = 0; j < ${col_widths[i]}; j++)); do
-      separator_line+="-"
-    done
-    if [ $i -lt $((${#headers_ref[@]} - 1)) ]; then
-      separator_line+="---"
-    fi
-  done
-  echo
-  echo -e "${GRAY}$separator_line${NC}"
-
-  # Print rows
-  for row in "${rows_ref[@]}"; do
-    IFS='|' read -ra COLS <<<"$row"
-    for ((i = 0; i < ${#COLS[@]}; i++)); do
-      printf "%-${col_widths[i]}s" "${COLS[i]}"
-      if [ $i -lt $((${#COLS[@]} - 1)) ]; then
-        printf " $separator "
-      fi
-    done
-    echo
-  done
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo "${BOLD}${BLUE}${top_bottom}${RESET}"
+    printf "${BOLD}${BLUE}|${RESET}%*s${BOLD}${BLUE}|${RESET}\n" "$((width - 2))" ""
+    printf "${BOLD}${BLUE}|${RESET}%*s%-*s%*s${BOLD}${BLUE}|${RESET}\n" \
+      "$padding" "" "$content_width" "$text" "$padding" ""
+    printf "${BOLD}${BLUE}|${RESET}%*s${BOLD}${BLUE}|${RESET}\n" "$((width - 2))" ""
+    echo "${BOLD}${BLUE}${top_bottom}${RESET}"
+  else
+    echo "$top_bottom"
+    printf "|%*s|\n" "$((width - 2))" ""
+    printf "|%*s%-*s%*s|\n" "$padding" "" "$content_width" "$text" "$padding" ""
+    printf "|%*s|\n" "$((width - 2))" ""
+    echo "$top_bottom"
+  fi
 }
 
-# Export functions for use in other modules
-if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
-  export -f print_color
-  export -f print_status
-  export -f create_progress_bar
-  export -f create_metric_bar
-  export -f print_header
-  export -f print_separator
-  export -f show_spinner
-  export -f colorize_metric
-  export -f confirm_prompt
-  export -f print_table
-fi
+# Initialize colors when this file is sourced
+init_colors

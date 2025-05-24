@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Text-based User Interface (TUI) Main Entry Point
 #
@@ -13,6 +13,11 @@ if [ -z "$BASE_DIR" ]; then
   BASE_DIR="$(dirname "$(dirname "$(dirname "$SCRIPT_DIR")")")"
 fi
 
+# Source core utilities for unified command checking
+if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils.sh"
+fi
+
 # Try to use advanced TUI first
 if [ -f "$TUI_DIR/advanced_tui.sh" ] && [ "${SERVERSENTRY_SIMPLE_TUI:-}" != "true" ]; then
   echo "Starting ServerSentry Advanced TUI..."
@@ -25,10 +30,10 @@ else
   # Fallback to simple TUI
   echo "Using Simple TUI (set SERVERSENTRY_SIMPLE_TUI=true to force this mode)"
 
-  # Check for dialog/whiptail
-  if command -v dialog &>/dev/null; then
+  # Check for dialog/whiptail using unified command checking
+  if util_command_exists dialog; then
     TUI_TOOL="dialog"
-  elif command -v whiptail &>/dev/null; then
+  elif util_command_exists whiptail; then
     TUI_TOOL="whiptail"
   else
     TUI_TOOL="none"

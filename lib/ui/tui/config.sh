@@ -1,54 +1,55 @@
-#!/bin/bash
-# TUI config module
+#!/usr/bin/env bash
+# TUI configuration management module
+
+# Source utilities if not already loaded
+if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils.sh"
+fi
 
 source "$(dirname "$0")/utils.sh"
 
-tui_configure() {
-  local config_file="$BASE_DIR/config/serversentry.yaml"
-  if [ "$TUI_TOOL" = "dialog" ]; then
-    dialog --msgbox "Launching configuration editor..." 8 40
-    ${EDITOR:-vi} "$config_file"
-    # Validate YAML after editing
-    if command -v yq >/dev/null 2>&1; then
-      if ! yq e . "$config_file" >/dev/null 2>&1; then
-        dialog --msgbox "YAML syntax error detected in serversentry.yaml! Please fix before continuing." 10 60
-        ${EDITOR:-vi} "$config_file"
-      fi
-    fi
-  elif [ "$TUI_TOOL" = "whiptail" ]; then
-    whiptail --msgbox "Launching configuration editor..." 8 40
-    ${EDITOR:-vi} "$config_file"
-    if command -v yq >/dev/null 2>&1; then
-      if ! yq e . "$config_file" >/dev/null 2>&1; then
-        whiptail --msgbox "YAML syntax error detected in serversentry.yaml! Please fix before continuing." 10 60
-        ${EDITOR:-vi} "$config_file"
-      fi
-    fi
+tui_show_config() {
+  local config_content
+  if util_command_exists yq; then
+    config_content=$(yq . "$MAIN_CONFIG" 2>/dev/null)
   else
-    echo -e "\n--- Edit Configuration ---"
-    ${EDITOR:-vi} "$config_file"
-    if command -v yq >/dev/null 2>&1; then
-      if ! yq e . "$config_file" >/dev/null 2>&1; then
-        echo "YAML syntax error detected in serversentry.yaml! Please fix before continuing."
-        ${EDITOR:-vi} "$config_file"
-      fi
-    fi
-    echo -e "--------------------------\n"
-    read -p "Press Enter to continue..."
+    config_content=$(cat "$MAIN_CONFIG" 2>/dev/null)
   fi
+
+  tui_show_message "Current Configuration:\n\n$config_content" 25 80
 }
 
-tui_show_config() {
-  local config_file="$BASE_DIR/config/serversentry.yaml"
-  if [ "$TUI_TOOL" = "dialog" ]; then
-    dialog --textbox "$config_file" 30 100
-  elif [ "$TUI_TOOL" = "whiptail" ]; then
-    whiptail --textbox "$config_file" 30 100
+tui_configure() {
+  if util_command_exists yq; then
+    config_content=$(yq . "$MAIN_CONFIG" 2>/dev/null)
   else
-    echo -e "\n--- Current Configuration ---"
-    cat "$config_file"
-    echo -e "-----------------------------\n"
-    read -p "Press Enter to continue..."
+    config_content="yq command not available, showing raw config"
+  fi
+
+  if [ "$TUI_TOOL" = "dialog" ] || [ "$TUI_TOOL" = "whiptail" ]; then
+    local edit_choice
+    if [ "$TUI_TOOL" = "dialog" ]; then
+      edit_choice=$(dialog --stdout --yesno "Do you want to edit the configuration file directly?" 8 60 && echo "yes" || echo "no")
+    else
+      edit_choice=$(whiptail --yesno "Do you want to edit the configuration file directly?" 8 60 && echo "yes" || echo "no")
+    fi
+
+    if [ "$edit_choice" = "yes" ]; then
+      ${EDITOR:-vi} "$MAIN_CONFIG"
+      # Validate YAML after edit
+      if util_command_exists yq; then
+        if ! yq . "$MAIN_CONFIG" >/dev/null 2>&1; then
+          tui_show_message "YAML syntax error detected! Please fix before continuing." 10 60
+          ${EDITOR:-vi} "$MAIN_CONFIG"
+        fi
+      fi
+    fi
+  else
+    echo "Current configuration file: $MAIN_CONFIG"
+    read -p "Do you want to edit it? [y/N]: " edit_choice
+    if [[ "$edit_choice" =~ ^[Yy] ]]; then
+      ${EDITOR:-vi} "$MAIN_CONFIG"
+    fi
   fi
 }
 

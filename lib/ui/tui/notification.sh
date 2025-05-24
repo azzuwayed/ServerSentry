@@ -1,5 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # TUI notification management module
+
+# Source utilities if not already loaded
+if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils.sh"
+fi
 
 source "$(dirname "$0")/utils.sh"
 
@@ -7,7 +12,7 @@ tui_notification_management() {
   # Read enabled notification channels from config
   local config_file="$BASE_DIR/config/serversentry.yaml"
   local enabled_channels
-  if command -v yq >/dev/null 2>&1; then
+  if util_command_exists yq; then
     enabled_channels=$(yq e '.notification_channels | join(",")' "$config_file" 2>/dev/null)
   else
     enabled_channels=$(grep '^notification_channels:' "$config_file" | sed 's/^notification_channels:[[:space:]]*\[//;s/\][[:space:]]*$//;s/[[:space:]]//g')
@@ -88,7 +93,7 @@ tui_notification_management() {
       read -p "Press Enter to continue..."
     fi
     # Validate YAML after edit (main config)
-    if command -v yq >/dev/null 2>&1; then
+    if util_command_exists yq; then
       if ! yq e . "$BASE_DIR/config/serversentry.yaml" >/dev/null 2>&1; then
         tui_show_message "YAML syntax error detected in serversentry.yaml! Please fix before continuing." 10 60
         ${EDITOR:-vi} "$BASE_DIR/config/serversentry.yaml"
@@ -147,7 +152,7 @@ tui_notification_management() {
         awk -v repl="$new_line" '/^notification_channels:/ {$0=repl} {print}' "$config_file" >"$config_file.new" && mv "$config_file.new" "$config_file"
       fi
       # Validate YAML after change
-      if command -v yq >/dev/null 2>&1; then
+      if util_command_exists yq; then
         if ! yq e . "$config_file" >/dev/null 2>&1; then
           tui_show_message "YAML syntax error detected in serversentry.yaml! Please fix before continuing." 10 60
           ${EDITOR:-vi} "$config_file"

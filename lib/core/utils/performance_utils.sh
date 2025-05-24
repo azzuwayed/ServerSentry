@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Performance Utilities
 #
@@ -69,7 +69,7 @@ util_performance_timer_stop() {
   end_time=$(date +%s.%N 2>/dev/null || date +%s)
 
   local duration
-  if compat_command_exists bc; then
+  if util_command_exists bc; then
     duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "0")
   else
     duration=$(echo "$end_time - $start_time" | awk '{print $1}' 2>/dev/null || echo "0")
@@ -119,7 +119,7 @@ util_performance_measure() {
   end_time=$(date +%s.%N 2>/dev/null || date +%s)
 
   local duration
-  if compat_command_exists bc; then
+  if util_command_exists bc; then
     duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "0")
   else
     duration=$(echo "$end_time - $start_time" | awk '{print $1}' 2>/dev/null || echo "0")
@@ -197,7 +197,7 @@ util_performance_benchmark_system() {
   local cpu_end
   cpu_end=$(date +%s.%N 2>/dev/null || date +%s)
   local cpu_duration
-  if compat_command_exists bc; then
+  if util_command_exists bc; then
     cpu_duration=$(echo "$cpu_end - $cpu_start" | bc -l 2>/dev/null || echo "0")
   else
     cpu_duration=$(echo "$cpu_end - $cpu_start" | awk '{print $1}' 2>/dev/null || echo "0")

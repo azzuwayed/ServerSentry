@@ -718,7 +718,7 @@ serversentry status
 ### Automation and Scripting
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 # Check if CPU usage is critical
 if serversentry check cpu --json | jq -r '.status' | grep -q 'CRITICAL'; then
     echo "CPU usage is critical!"
@@ -729,7 +729,7 @@ fi
 ### Troubleshooting Script
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 # Comprehensive health check
 echo "=== ServerSentry Health Check ==="
 serversentry diagnostics run
@@ -762,7 +762,7 @@ serversentry template test slack warning
 
 ```bash
 # Custom monitoring script
-#!/bin/bash
+#!/usr/bin/env bash
 STATUS=$(serversentry status --json)
 CPU=$(echo "$STATUS" | jq -r '.plugins.cpu.value')
 if [ "$CPU" -gt 90 ]; then

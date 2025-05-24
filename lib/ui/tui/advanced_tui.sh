@@ -1,9 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Advanced Text-based User Interface (TUI)
 #
 # This module provides an enhanced interactive terminal interface with real-time monitoring,
 # dashboards, configuration management, and system controls
+
+# Source utilities if not already loaded
+if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils.sh"
+fi
 
 # TUI Configuration
 TUI_REFRESH_RATE=2
@@ -33,6 +38,48 @@ fi
 
 # Initialize advanced TUI system
 init_advanced_tui() {
+  # Check terminal capabilities
+  if [[ -t 1 ]] && util_command_exists tput; then
+    # Color support
+    TUI_NC="$(tput sgr0)"
+    TUI_BOLD="$(tput bold)"
+    TUI_DIM="$(tput dim)"
+    TUI_RED="$(tput setaf 1)"
+    TUI_GREEN="$(tput setaf 2)"
+    TUI_YELLOW="$(tput setaf 3)"
+    TUI_BLUE="$(tput setaf 4)"
+    TUI_MAGENTA="$(tput setaf 5)"
+    TUI_CYAN="$(tput setaf 6)"
+    TUI_WHITE="$(tput setaf 7)"
+
+    # Cursor control
+    TUI_HOME="$(tput home)"
+    TUI_CLEAR="$(tput clear)"
+    TUI_SAVE_CURSOR="$(tput sc)"
+    TUI_RESTORE_CURSOR="$(tput rc)"
+
+    # Terminal capabilities
+    TUI_COLS=$(tput cols 2>/dev/null || echo "80")
+    TUI_LINES=$(tput lines 2>/dev/null || echo "24")
+  else
+    # Fallback for terminals without tput
+    TUI_NC="" TUI_BOLD="" TUI_DIM=""
+    TUI_RED="" TUI_GREEN="" TUI_YELLOW="" TUI_BLUE="" TUI_MAGENTA="" TUI_CYAN="" TUI_WHITE=""
+    TUI_HOME="" TUI_CLEAR="clear" TUI_SAVE_CURSOR="" TUI_RESTORE_CURSOR=""
+    TUI_COLS=80 TUI_LINES=24
+  fi
+
+  # Set up signal handlers for graceful exit
+  trap 'handle_tui_exit' EXIT INT TERM
+
+  # Hide cursor
+  if util_command_exists tput; then
+    tput civis 2>/dev/null
+  fi
+
+  # Clear screen
+  printf "${TUI_CLEAR}"
+
   log_debug "Initializing advanced TUI system"
 
   # Source required modules
@@ -46,11 +93,7 @@ init_advanced_tui() {
   fi
 
   # Set up signal handlers for TUI
-  trap 'handle_tui_exit' INT TERM
   trap 'handle_tui_resize' WINCH
-
-  # Hide cursor
-  printf '\033[?25l'
 
   return 0
 }
@@ -58,7 +101,9 @@ init_advanced_tui() {
 # Handle TUI exit
 handle_tui_exit() {
   # Show cursor
-  printf '\033[?25h'
+  if util_command_exists tput; then
+    tput cnorm 2>/dev/null
+  fi
 
   # Clear screen
   clear
@@ -85,7 +130,7 @@ handle_tui_resize() {
 
 # Get terminal size
 get_terminal_size() {
-  if command -v tput >/dev/null 2>&1; then
+  if util_command_exists tput; then
     TERM_WIDTH=$(tput cols 2>/dev/null || echo "80")
     TERM_HEIGHT=$(tput lines 2>/dev/null || echo "24")
   else
@@ -220,7 +265,7 @@ draw_system_status_panel() {
   fi
 
   # Plugin status
-  if command -v jq >/dev/null 2>&1 && [ -n "$plugin_results" ]; then
+  if util_command_exists jq && [ -n "$plugin_results" ]; then
     local plugin_count
     plugin_count=$(echo "$plugin_results" | jq '.plugins | length' 2>/dev/null || echo "0")
     printf "│ Plugins: $plugin_count active │\n"
@@ -248,7 +293,7 @@ draw_resource_usage_panel() {
   printf "${TUI_BOLD}Resource Usage:${TUI_NC}\n"
   printf "├─────────────────────────────┐\n"
 
-  if command -v jq >/dev/null 2>&1 && [ -n "$plugin_results" ]; then
+  if util_command_exists jq && [ -n "$plugin_results" ]; then
     # CPU Usage
     local cpu_value
     cpu_value=$(echo "$plugin_results" | jq -r '.plugins[] | select(.name=="cpu") | .metrics.value // "N/A"' 2>/dev/null)
@@ -401,7 +446,7 @@ show_plugin_screen() {
   local plugin_results
   plugin_results=$(run_all_plugin_checks 2>/dev/null)
 
-  if command -v jq >/dev/null 2>&1 && [ -n "$plugin_results" ]; then
+  if util_command_exists jq && [ -n "$plugin_results" ]; then
     echo "$plugin_results" | jq -r '.plugins[] | "\(.name)|\(.status_code)|\(.status_message)|\(.metrics.value // "N/A")"' | while IFS='|' read -r name status_code message value; do
       local status_icon
       case "$status_code" in

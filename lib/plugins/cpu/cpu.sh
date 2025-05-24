@@ -2,147 +2,201 @@
 #
 # ServerSentry v2 - CPU Monitoring Plugin
 #
-# This plugin monitors CPU usage and alerts when thresholds are exceeded
+# This plugin monitors CPU usage, load average, and related metrics
 
 # Plugin metadata
-cpu_plugin_name="cpu"
-cpu_plugin_version="1.0"
-cpu_plugin_description="Monitors CPU usage and performance"
-cpu_plugin_author="ServerSentry Team"
+CPU_PLUGIN_VERSION="2.0.0"
+CPU_PLUGIN_AUTHOR="ServerSentry Team"
+CPU_PLUGIN_DESCRIPTION="CPU usage and load average monitoring"
 
 # Default configuration
-cpu_threshold=80
-cpu_warning_threshold=70
-cpu_check_interval=60
-cpu_include_iowait=true
+CPU_THRESHOLD=85
+CPU_WARNING_THRESHOLD=75
+CPU_CHECK_INTERVAL=30
+CPU_LOAD_THRESHOLD=10.0
 
-# Return plugin information
+# Plugin information function
 cpu_plugin_info() {
-  echo "CPU Monitoring Plugin v${cpu_plugin_version}"
+  echo "CPU Monitor v${CPU_PLUGIN_VERSION} - ${CPU_PLUGIN_DESCRIPTION}"
 }
 
-# Configure the plugin
+# Plugin configuration function
 cpu_plugin_configure() {
   local config_file="$1"
 
   # Load configuration if file exists
-  if [ -f "$config_file" ]; then
+  if [[ -n "$config_file" && -f "$config_file" ]]; then
+    # shellcheck source=/dev/null
     source "$config_file"
   fi
 
-  # Validate configuration
-  if ! [[ "$cpu_threshold" =~ ^[0-9]+$ ]] || [ "$cpu_threshold" -gt 100 ]; then
-    log_error "Invalid CPU threshold: $cpu_threshold (must be 0-100)"
-    return 1
+  # Validate thresholds
+  if [[ "$CPU_THRESHOLD" -lt 1 || "$CPU_THRESHOLD" -gt 100 ]]; then
+    log_warning "Invalid CPU_THRESHOLD: $CPU_THRESHOLD, using default: 85"
+    CPU_THRESHOLD=85
   fi
 
-  if ! [[ "$cpu_warning_threshold" =~ ^[0-9]+$ ]] || [ "$cpu_warning_threshold" -gt 100 ]; then
-    log_error "Invalid CPU warning threshold: $cpu_warning_threshold (must be 0-100)"
-    return 1
+  if [[ "$CPU_WARNING_THRESHOLD" -lt 1 || "$CPU_WARNING_THRESHOLD" -gt 100 ]]; then
+    log_warning "Invalid CPU_WARNING_THRESHOLD: $CPU_WARNING_THRESHOLD, using default: 75"
+    CPU_WARNING_THRESHOLD=75
   fi
 
-  if [ "$cpu_warning_threshold" -gt "$cpu_threshold" ]; then
-    log_warning "Warning threshold ($cpu_warning_threshold) is higher than critical threshold ($cpu_threshold), swapping values"
-    local temp=$cpu_threshold
-    cpu_threshold=$cpu_warning_threshold
-    cpu_warning_threshold=$temp
+  # Ensure warning threshold is less than critical threshold
+  if [[ "$CPU_WARNING_THRESHOLD" -ge "$CPU_THRESHOLD" ]]; then
+    CPU_WARNING_THRESHOLD=$((CPU_THRESHOLD - 10))
+    log_warning "Adjusted CPU_WARNING_THRESHOLD to $CPU_WARNING_THRESHOLD (must be less than critical threshold)"
   fi
-
-  log_debug "CPU plugin configured with: threshold=$cpu_threshold, warning=$cpu_warning_threshold"
 
   return 0
 }
 
-# Perform CPU check
+# Main CPU check function
 cpu_plugin_check() {
-  local result
-  local status_code=0
-  local status_message="OK"
+  local cpu_usage
+  local load_avg
+  local status="OK"
+  local message=""
+  local details=""
 
-  # Get CPU usage using compatibility layer
-  result=$(compat_get_cpu_usage 2>/dev/null)
+  # Get CPU usage
+  cpu_usage=$(get_cpu_usage)
+  if [[ $? -ne 0 || -z "$cpu_usage" ]]; then
+    status="ERROR"
+    message="Failed to retrieve CPU usage"
+    echo "STATUS=$status"
+    echo "MESSAGE=$message"
+    return 1
+  fi
 
-  # Check if we got a valid result
-  if [[ -z "$result" || "$result" == "0.0" ]]; then
-    # Fallback to OS-specific methods if compatibility layer fails
-    local os_type
-    os_type=$(compat_get_os)
+  # Get load average
+  load_avg=$(get_load_average)
+  if [[ $? -ne 0 || -z "$load_avg" ]]; then
+    load_avg="0.00"
+  fi
 
-    case "$os_type" in
-    linux)
-      # Linux-style - using /proc/stat if available
-      if [[ -r /proc/stat ]]; then
-        result=$(awk '/^cpu /{u=$2+$4; t=$2+$3+$4+$5; if (NR==1){u1=u; t1=t;} else print (u-u1) * 100 / (t-t1); }' <(
-          grep 'cpu ' /proc/stat
-          sleep 1
-          grep 'cpu ' /proc/stat
-        ) 2>/dev/null)
-      elif compat_command_exists top; then
-        result=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
-      else
-        result="unknown"
-        status_code=3
-        status_message="Cannot determine CPU usage: required commands not found"
-      fi
+  # Determine status based on thresholds
+  local cpu_int=${cpu_usage%.*} # Remove decimal part for comparison
+  if [[ "$cpu_int" -ge "$CPU_THRESHOLD" ]]; then
+    status="CRITICAL"
+    message="High CPU usage: ${cpu_usage}%"
+  elif [[ "$cpu_int" -ge "$CPU_WARNING_THRESHOLD" ]]; then
+    status="WARNING"
+    message="Elevated CPU usage: ${cpu_usage}%"
+  else
+    status="OK"
+    message="CPU usage normal: ${cpu_usage}%"
+  fi
+
+  # Add load average information
+  details="CPU Usage: ${cpu_usage}%, Load Average: ${load_avg}"
+
+  # Output results
+  echo "STATUS=$status"
+  echo "MESSAGE=$message"
+  echo "VALUE=$cpu_usage"
+  echo "LOAD_AVERAGE=$load_avg"
+  echo "THRESHOLD=$CPU_THRESHOLD"
+  echo "WARNING_THRESHOLD=$CPU_WARNING_THRESHOLD"
+  echo "DETAILS=$details"
+
+  return 0
+}
+
+# Get CPU usage percentage
+get_cpu_usage() {
+  local cpu_usage
+
+  # Try different methods based on OS and available tools
+  if util_command_exists iostat; then
+    # Use iostat if available (most accurate)
+    cpu_usage=$(iostat -c 1 2 2>/dev/null | tail -1 | awk '{print 100 - $6}' 2>/dev/null)
+  elif util_command_exists top; then
+    # Fallback to top command
+    case "$(uname -s)" in
+    Darwin*)
+      # macOS top format
+      cpu_usage=$(top -l 2 -n 0 | grep "CPU usage" | tail -1 | awk '{print $3}' | tr -d '%' 2>/dev/null)
       ;;
-
-    macos)
-      # macOS-style - using iostat if available
-      if compat_command_exists iostat; then
-        result=$(iostat -c 1 2 2>/dev/null | tail -1 | awk '{print 100 - $6}')
-      elif compat_command_exists top; then
-        result=$(top -l 1 | grep "CPU usage" | awk '{print $3}' | tr -d "%")
-      else
-        result="unknown"
-        status_code=3
-        status_message="Cannot determine CPU usage: required commands not found"
-      fi
+    Linux*)
+      # Linux top format
+      cpu_usage=$(top -bn2 | grep "Cpu(s)" | tail -1 | awk '{print $2}' | tr -d '%us,' 2>/dev/null)
       ;;
-
     *)
-      # Unsupported OS
-      result="unknown"
-      status_code=3
-      status_message="Unsupported OS type: $os_type"
+      cpu_usage=$(top -bn1 | grep -i "cpu" | head -1 | awk '{print $2}' | tr -d '%' 2>/dev/null)
       ;;
     esac
-  fi
-
-  # Check thresholds if we got a numeric result
-  if [[ "$result" =~ ^[0-9.]+$ ]]; then
-    # Format to one decimal place
-    result=$(printf "%.1f" "$result")
-
-    if (($(echo "$result >= $cpu_threshold" | bc -l 2>/dev/null || awk -v a="$result" -v b="$cpu_threshold" 'BEGIN{print (a>=b)?"1":"0"}'))); then
-      status_code=2
-      status_message="CRITICAL: CPU usage is ${result}%, threshold: ${cpu_threshold}%"
-    elif (($(echo "$result >= $cpu_warning_threshold" | bc -l 2>/dev/null || awk -v a="$result" -v b="$cpu_warning_threshold" 'BEGIN{print (a>=b)?"1":"0"}'))); then
-      status_code=1
-      status_message="WARNING: CPU usage is ${result}%, threshold: ${cpu_warning_threshold}%"
+  elif [[ -r /proc/stat ]]; then
+    # Linux /proc/stat method
+    cpu_usage=$(awk '/^cpu / {
+      idle_prev = idle; total_prev = total
+      idle = $5; total = $2 + $3 + $4 + $5 + $6 + $7 + $8
+      if (NR > 1) printf "%.1f", (100 * (1 - (idle - idle_prev) / (total - total_prev)))
+    }' /proc/stat /proc/stat 2>/dev/null)
+  elif util_command_exists sar; then
+    # Use sar if available
+    cpu_usage=$(sar 1 1 | awk '/^Average:/ && /all/ {print 100 - $8}' 2>/dev/null)
+  else
+    # Last resort - use uptime load average as approximation
+    local load
+    load=$(get_load_average)
+    if [[ -n "$load" ]]; then
+      # Very rough approximation: load * 10 = CPU usage
+      cpu_usage=$(echo "$load * 10" | bc -l 2>/dev/null | awk '{printf "%.1f", $1}')
     else
-      status_message="OK: CPU usage is ${result}%"
+      return 1
     fi
-  elif [[ "$result" == "unknown" && "$status_code" -eq 0 ]]; then
-    status_code=3
-    status_message="Cannot determine CPU usage"
   fi
 
-  # Get timestamp using compatibility layer if available
-  local timestamp
-  timestamp=$(get_timestamp)
+  # Validate result
+  if [[ -z "$cpu_usage" || "$cpu_usage" == "0" ]]; then
+    return 1
+  fi
 
-  # Return standardized output format
-  cat <<EOF
-{
-  "plugin": "cpu",
-  "status_code": ${status_code},
-  "status_message": "${status_message}",
-  "metrics": {
-    "usage_percent": ${result},
-    "threshold": ${cpu_threshold},
-    "warning_threshold": ${cpu_warning_threshold}
-  },
-  "timestamp": "${timestamp}"
+  # Ensure it's a valid number and within range
+  if ! echo "$cpu_usage" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+    return 1
+  fi
+
+  # Cap at 100%
+  if (($(echo "$cpu_usage > 100" | bc -l 2>/dev/null || echo 0))); then
+    cpu_usage="100.0"
+  fi
+
+  echo "$cpu_usage"
+  return 0
 }
-EOF
+
+# Get load average (1 minute)
+get_load_average() {
+  local load_avg
+
+  # Use compatibility function if available
+  if declare -f compat_get_load_average >/dev/null 2>&1; then
+    load_avg=$(compat_get_load_average)
+  elif util_command_exists uptime; then
+    # Parse uptime output
+    load_avg=$(uptime | awk -F'load average:' '{print $2}' | awk -F',' '{print $1}' | tr -d ' ' 2>/dev/null)
+  elif [[ -r /proc/loadavg ]]; then
+    # Linux /proc/loadavg
+    load_avg=$(awk '{print $1}' /proc/loadavg 2>/dev/null)
+  else
+    load_avg="0.00"
+  fi
+
+  # Validate result
+  if [[ -z "$load_avg" ]]; then
+    load_avg="0.00"
+  fi
+
+  echo "$load_avg"
+  return 0
 }
+
+# Export plugin functions
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  export -f cpu_plugin_info
+  export -f cpu_plugin_configure
+  export -f cpu_plugin_check
+  export -f get_cpu_usage
+  export -f get_load_average
+fi

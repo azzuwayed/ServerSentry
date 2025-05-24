@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Anomaly Detection System
 #
@@ -446,7 +446,7 @@ anomaly_run_detection() {
   local anomaly_results="[]"
 
   # Process each plugin result using new JSON utilities
-  if compat_command_exists jq; then
+  if util_command_exists jq; then
     echo "$plugin_results" | jq -r '.plugins[]? | "\(.name)|\(.metrics.value // 0)"' | while IFS='|' read -r plugin_name metric_value; do
       if [[ -n "$plugin_name" && -n "$metric_value" ]]; then
         # Sanitize plugin name
@@ -570,7 +570,7 @@ anomaly_get_consecutive_count() {
   local max_check=10 # Check last 10 entries
 
   # Use safer file reading
-  if compat_command_exists tail && compat_command_exists tac; then
+  if util_command_exists tail && util_command_exists tac; then
     tail -n "$max_check" "$result_file" | tac | while read -r line; do
       if [[ -n "$line" ]] && echo "$line" | jq -e '.is_anomaly == true' >/dev/null 2>&1; then
         count=$((count + 1))
@@ -599,7 +599,7 @@ anomaly_send_notification() {
     return 1
   fi
 
-  if ! compat_command_exists jq; then
+  if ! util_command_exists jq; then
     log_warning "jq not available for anomaly notification"
     return 1
   fi

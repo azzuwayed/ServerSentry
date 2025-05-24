@@ -1,145 +1,162 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # TUI plugin management module
+
+# Source utilities if not already loaded
+if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils.sh"
+fi
 
 source "$(dirname "$0")/utils.sh"
 
 tui_plugin_management() {
-  # Read enabled plugins from config
-  local config_file="$BASE_DIR/config/serversentry.yaml"
-  local enabled_plugins
-  if command -v yq >/dev/null 2>&1; then
-    enabled_plugins=$(yq e '.plugins.enabled | join(",")' "$config_file" 2>/dev/null)
+  if util_command_exists yq; then
+    local plugins_config
+    plugins_config=$(yq e '.plugins' "$BASE_DIR/config/serversentry.yaml" 2>/dev/null)
   else
-    enabled_plugins=$(grep '^[[:space:]]*enabled:' "$config_file" | grep -A1 'plugins:' | tail -1 | sed 's/^[[:space:]]*enabled:[[:space:]]*\[//;s/\][[:space:]]*$//;s/[[:space:]]//g')
+    plugins_config="yq command not available"
   fi
-  IFS=',' read -ra enabled_array <<<"$enabled_plugins"
-
-  # Find all available plugins (by directory)
-  local plugin_dir="$BASE_DIR/lib/plugins"
-  local all_plugins=()
-  for d in "$plugin_dir"/*/; do
-    [ -d "$d" ] || continue
-    all_plugins+=("$(basename "$d")")
-  done
-
-  # Build menu options
-  local menu_opts=()
-  for plugin in "${all_plugins[@]}"; do
-    local status="disabled"
-    for en in "${enabled_array[@]}"; do
-      if [ "$plugin" = "$en" ]; then
-        status="enabled"
-        break
-      fi
-    done
-    menu_opts+=("$plugin" "$status")
-  done
 
   local choice
   if [ "$TUI_TOOL" = "dialog" ]; then
     choice=$(dialog --clear --stdout --title "Plugin Management" \
-      --menu "Select a plugin to manage:" 20 60 10 \
-      "${menu_opts[@]}" \
-      edit "Edit plugin config" \
-      back "Return to main menu")
+      --menu "Select an action:" 15 50 8 \
+      1 "List Plugins" \
+      2 "Enable Plugin" \
+      3 "Disable Plugin" \
+      4 "Configure Plugin" \
+      5 "Test Plugin" \
+      6 "Return to Main Menu")
   elif [ "$TUI_TOOL" = "whiptail" ]; then
-    choice=$(whiptail --title "Plugin Management" --menu "Select a plugin to manage:" 20 60 10 \
-      "${menu_opts[@]}" \
-      edit "Edit plugin config" \
-      back "Return to main menu" 3>&1 1>&2 2>&3)
+    choice=$(whiptail --title "Plugin Management" --menu "Select an action:" 15 50 8 \
+      1 "List Plugins" \
+      2 "Enable Plugin" \
+      3 "Disable Plugin" \
+      4 "Configure Plugin" \
+      5 "Test Plugin" \
+      6 "Return to Main Menu" 3>&1 1>&2 2>&3)
   else
-    echo -e "\n--- Plugin Management ---"
-    for i in "${!all_plugins[@]}"; do
-      echo "$((i + 1))) ${all_plugins[$i]} [${menu_opts[$((i * 2 + 1))]}]"
-    done
-    echo "$((${#all_plugins[@]} + 1))) Edit plugin config"
-    echo "$((${#all_plugins[@]} + 2))) Return to main menu"
-    read -p "Select a plugin to toggle/edit [1-$((${#all_plugins[@]} + 2))]: " idx
-    if [ "$idx" -gt 0 ] && [ "$idx" -le "${#all_plugins[@]}" ]; then
-      choice="${all_plugins[$((idx - 1))]}"
-    elif [ "$idx" = "$((${#all_plugins[@]} + 1))" ]; then
-      choice="edit"
-    else
-      return
-    fi
+    echo ""
+    echo "Plugin Management"
+    echo "================="
+    echo "1) List Plugins"
+    echo "2) Enable Plugin"
+    echo "3) Disable Plugin"
+    echo "4) Configure Plugin"
+    echo "5) Test Plugin"
+    echo "6) Return to Main Menu"
+    read -p "Select an action [1-6]: " choice
   fi
 
-  if [ "$choice" = "edit" ]; then
-    # Ask which plugin to edit
-    if [ "$TUI_TOOL" = "dialog" ] || [ "$TUI_TOOL" = "whiptail" ]; then
-      local edit_plugin
-      if [ "$TUI_TOOL" = "dialog" ]; then
-        edit_plugin=$(dialog --stdout --menu "Select plugin to edit config:" 20 60 10 "${all_plugins[@]}")
-      else
-        edit_plugin=$(whiptail --menu "Select plugin to edit config:" 20 60 10 "${all_plugins[@]}" 3>&1 1>&2 2>&3)
-      fi
-      [ -z "$edit_plugin" ] && return
-    else
-      echo "Select plugin to edit config:"
-      select edit_plugin in "${all_plugins[@]}"; do
-        [ -n "$edit_plugin" ] && break
-      done
+  case "$choice" in
+  1) tui_list_plugins ;;
+  2) tui_enable_plugin ;;
+  3) tui_disable_plugin ;;
+  4) tui_configure_plugin ;;
+  5) tui_test_plugin ;;
+  6) return ;;
+  *)
+    if [ "$TUI_TOOL" = "none" ]; then
+      echo "Invalid choice."
     fi
-    local plugin_conf="$BASE_DIR/config/plugins/${edit_plugin}.conf"
-    ${EDITOR:-vi} "$plugin_conf"
-    # Basic validation: check file is not empty
-    if [ ! -s "$plugin_conf" ]; then
-      echo "Warning: $plugin_conf is empty!"
-      read -p "Press Enter to continue..."
-    fi
-    # Validate YAML after edit (main config)
-    if command -v yq >/dev/null 2>&1; then
-      if ! yq e . "$BASE_DIR/config/serversentry.yaml" >/dev/null 2>&1; then
-        tui_show_message "YAML syntax error detected in serversentry.yaml! Please fix before continuing." 10 60
-        ${EDITOR:-vi} "$BASE_DIR/config/serversentry.yaml"
-      fi
-    fi
-    tui_plugin_management
-    return
-  elif [ "$choice" = "back" ]; then
-    return
+    ;;
+  esac
+
+  # Recursive call to show menu again
+  tui_plugin_management
+}
+
+tui_list_plugins() {
+  check_serversentry_bin || return
+
+  local plugin_list
+  plugin_list=$("$SERVERSENTRY_BIN" list 2>&1)
+
+  tui_show_message "Available Plugins:\n\n$plugin_list" 15 60
+}
+
+tui_enable_plugin() {
+  local plugin_name
+
+  if [ "$TUI_TOOL" = "dialog" ]; then
+    plugin_name=$(dialog --stdout --inputbox "Enter plugin name to enable:" 8 40)
+  elif [ "$TUI_TOOL" = "whiptail" ]; then
+    plugin_name=$(whiptail --inputbox "Enter plugin name to enable:" 8 40 3>&1 1>&2 2>&3)
+  else
+    read -p "Enter plugin name to enable: " plugin_name
   fi
 
-  # If a plugin was selected, toggle its status
-  if [ -n "$choice" ]; then
-    local new_enabled=()
-    local found=0
-    for en in "${enabled_array[@]}"; do
-      if [ "$en" = "$choice" ]; then
-        found=1
-      else
-        new_enabled+=("$en")
-      fi
-    done
-    if [ $found -eq 0 ]; then
-      new_enabled+=("$choice")
-    fi
-    # Write new enabled plugins list to config in YAML array format
-    local new_line="  enabled: [$(
-      IFS=,
-      echo \""${new_enabled[*]}"\"
-    )]"
-    # Update the plugins.enabled line specifically
-    if ! sed -i.bak "/^[[:space:]]*enabled:.*# Plugin Configuration/,/^[[:space:]]*enabled:/c\\$new_line" "$config_file" 2>/dev/null; then
-      # Fallback method for updating plugins.enabled
-      awk -v repl="$new_line" '
-        /^plugins:/ { in_plugins=1 }
-        in_plugins && /^[[:space:]]*enabled:/ { $0=repl; in_plugins=0 }
-        /^[^[:space:]]/ && !/^plugins:/ { in_plugins=0 }
-        {print}
-      ' "$config_file" >"$config_file.new" && mv "$config_file.new" "$config_file"
-    fi
-    # Validate YAML after change
-    if command -v yq >/dev/null 2>&1; then
-      if ! yq e . "$config_file" >/dev/null 2>&1; then
-        tui_show_message "YAML syntax error detected in serversentry.yaml! Please fix before continuing." 10 60
-        ${EDITOR:-vi} "$config_file"
-      fi
-    fi
-    tui_show_message "Plugin '$choice' status toggled." 8 40
-    # Recursively call to allow more changes and refresh the menu
-    tui_plugin_management
+  if [ -n "$plugin_name" ]; then
+    # This would need to be implemented in the main config
+    tui_show_message "Plugin enabling not implemented in TUI yet. Please edit config manually." 8 60
   fi
+}
+
+tui_disable_plugin() {
+  local plugin_name
+
+  if [ "$TUI_TOOL" = "dialog" ]; then
+    plugin_name=$(dialog --stdout --inputbox "Enter plugin name to disable:" 8 40)
+  elif [ "$TUI_TOOL" = "whiptail" ]; then
+    plugin_name=$(whiptail --inputbox "Enter plugin name to disable:" 8 40 3>&1 1>&2 2>&3)
+  else
+    read -p "Enter plugin name to disable: " plugin_name
+  fi
+
+  if [ -n "$plugin_name" ]; then
+    # This would need to be implemented
+    tui_show_message "Plugin disabling not implemented in TUI yet. Please edit config manually." 8 60
+  fi
+}
+
+tui_configure_plugin() {
+  local plugin_name
+
+  if [ "$TUI_TOOL" = "dialog" ]; then
+    plugin_name=$(dialog --stdout --inputbox "Enter plugin name to configure:" 8 40)
+  elif [ "$TUI_TOOL" = "whiptail" ]; then
+    plugin_name=$(whiptail --inputbox "Enter plugin name to configure:" 8 40 3>&1 1>&2 2>&3)
+  else
+    read -p "Enter plugin name to configure: " plugin_name
+  fi
+
+  if [ -n "$plugin_name" ]; then
+    local plugin_config="$BASE_DIR/config/plugins/${plugin_name}.conf"
+    if [ -f "$plugin_config" ]; then
+      ${EDITOR:-vi} "$plugin_config"
+      # Validate configuration after edit
+      if util_command_exists yq; then
+        if ! yq e . "$plugin_config" >/dev/null 2>&1; then
+          tui_show_message "Configuration syntax error detected! Please fix before continuing." 10 60
+          ${EDITOR:-vi} "$plugin_config"
+        fi
+      fi
+    else
+      tui_show_message "Plugin configuration file not found: $plugin_config" 8 60
+    fi
+  fi
+}
+
+tui_test_plugin() {
+  check_serversentry_bin || return
+
+  local plugin_name
+
+  if [ "$TUI_TOOL" = "dialog" ]; then
+    plugin_name=$(dialog --stdout --inputbox "Enter plugin name to test (leave empty for all):" 8 50)
+  elif [ "$TUI_TOOL" = "whiptail" ]; then
+    plugin_name=$(whiptail --inputbox "Enter plugin name to test (leave empty for all):" 8 50 3>&1 1>&2 2>&3)
+  else
+    read -p "Enter plugin name to test (leave empty for all): " plugin_name
+  fi
+
+  local test_result
+  if [ -n "$plugin_name" ]; then
+    test_result=$("$SERVERSENTRY_BIN" check "$plugin_name" 2>&1)
+  else
+    test_result=$("$SERVERSENTRY_BIN" check 2>&1)
+  fi
+
+  tui_show_message "Plugin Test Results:\n\n$test_result" 20 80
 }
 
 # (This module is intended to be sourced by tui.sh)
