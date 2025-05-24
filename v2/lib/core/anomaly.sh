@@ -406,42 +406,38 @@ detect_spike_anomaly() {
   fi
 }
 
-# Parse anomaly detection configuration
-parse_anomaly_config() {
+# Parse anomaly detection configuration - REFACTORED
+# Now uses unified configuration utilities
+anomaly_parse_config() {
   local config_file="$1"
+  local plugin_name="$2"
 
-  if [ ! -f "$config_file" ]; then
-    log_error "Anomaly config file not found: $config_file"
+  # Use unified configuration parser with caching
+  if ! util_config_get_cached "$config_file" "anomaly_${plugin_name}" 300; then
+    log_error "Failed to parse anomaly configuration: $config_file"
     return 1
   fi
 
-  # Clear previous values
-  unset plugin metric enabled sensitivity window_size min_data_points
-  unset check_patterns detect_spikes detect_trends notification_threshold cooldown
-
-  # Source the configuration file
-  source "$config_file"
-
-  # Set defaults
-  enabled="${enabled:-true}"
-  sensitivity="${sensitivity:-2.0}"
-  window_size="${window_size:-20}"
-  min_data_points="${min_data_points:-10}"
-  check_patterns="${check_patterns:-true}"
-  detect_spikes="${detect_spikes:-true}"
-  detect_trends="${detect_trends:-true}"
-  notification_threshold="${notification_threshold:-3}"
-  cooldown="${cooldown:-1800}"
-
+  log_debug "Anomaly configuration loaded for plugin: $plugin_name"
   return 0
 }
 
-# Run anomaly detection for all configured metrics
-run_anomaly_detection() {
+# Get anomaly configuration value with defaults
+anomaly_get_config_value() {
+  local plugin_name="$1"
+  local key="$2"
+  local default_value="$3"
+
+  local value
+  value=$(util_config_get_value "$key" "$default_value" "anomaly_${plugin_name}")
+  echo "$value"
+}
+
+# Run anomaly detection for all configured metrics - REFACTORED
+anomaly_run_detection() {
   local plugin_results="$1"
 
-  if [ -z "$plugin_results" ]; then
-    log_error "No plugin results provided for anomaly detection"
+  if ! util_require_param "$plugin_results" "plugin_results"; then
     return 1
   fi
 
@@ -449,61 +445,88 @@ run_anomaly_detection() {
 
   local anomaly_results="[]"
 
-  # Process each plugin result
-  if command -v jq >/dev/null 2>&1; then
+  # Process each plugin result using new JSON utilities
+  if command_exists jq; then
     echo "$plugin_results" | jq -r '.plugins[]? | "\(.name)|\(.metrics.value // 0)"' | while IFS='|' read -r plugin_name metric_value; do
-      if [ -n "$plugin_name" ] && [ -n "$metric_value" ]; then
+      if [[ -n "$plugin_name" && -n "$metric_value" ]]; then
+        # Sanitize plugin name
+        plugin_name=$(util_sanitize_input "$plugin_name")
+
         # Store the metric data
         store_metric_data "$plugin_name" "value" "$metric_value"
 
         # Check for anomaly configuration
         local config_file="$ANOMALY_CONFIG_DIR/${plugin_name}_anomaly.conf"
-        if [ -f "$config_file" ]; then
-          # Run anomaly detection
-          local anomaly_result
-          anomaly_result=$(detect_statistical_anomaly "$plugin_name" "value" "$metric_value" "$config_file")
+        if util_validate_file_exists "$config_file" "Anomaly config"; then
+          # Load configuration using unified parser
+          if anomaly_parse_config "$config_file" "$plugin_name"; then
+            # Run anomaly detection
+            local anomaly_result
+            anomaly_result=$(detect_statistical_anomaly "$plugin_name" "value" "$metric_value" "$config_file")
 
-          if [ $? -eq 0 ]; then
-            # Anomaly detected
-            log_info "Anomaly detected for ${plugin_name}: $metric_value"
+            if [[ $? -eq 0 ]]; then
+              # Anomaly detected
+              log_info "Anomaly detected for ${plugin_name}: $metric_value"
 
-            # Store anomaly result
-            local result_file="$ANOMALY_RESULTS_DIR/${plugin_name}_$(date +%Y%m%d).log"
-            echo "$anomaly_result" >>"$result_file"
+              # Store anomaly result
+              local result_file="$ANOMALY_RESULTS_DIR/${plugin_name}_$(date +%Y%m%d).log"
+              echo "$anomaly_result" >>"$result_file"
 
-            # Check if notification should be sent
-            if should_send_anomaly_notification "$plugin_name" "$config_file"; then
-              send_anomaly_notification "$plugin_name" "$anomaly_result"
+              # Check if notification should be sent
+              if anomaly_should_send_notification "$plugin_name" "$config_file"; then
+                anomaly_send_notification "$plugin_name" "$anomaly_result"
+              fi
             fi
           fi
         fi
       fi
     done
-  fi
-
-  echo "{\"anomaly_detection_completed\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}"
-}
-
-# Check if anomaly notification should be sent
-should_send_anomaly_notification() {
-  local plugin_name="$1"
-  local config_file="$2"
-
-  # Parse configuration
-  if ! parse_anomaly_config "$config_file"; then
+  else
+    log_error "jq command not available for anomaly detection"
     return 1
   fi
 
+  # Return completion status as JSON
+  local completion_result
+  completion_result=$(util_json_create_object "anomaly_detection_completed=$(date -u +"%Y-%m-%dT%H:%M:%SZ")")
+  echo "$completion_result"
+}
+
+# Check if anomaly notification should be sent - REFACTORED
+anomaly_should_send_notification() {
+  local plugin_name="$1"
+  local config_file="$2"
+
+  if ! util_require_param "$plugin_name" "plugin_name"; then
+    return 1
+  fi
+
+  if ! util_require_param "$config_file" "config_file"; then
+    return 1
+  fi
+
+  # Load configuration using unified parser
+  if ! anomaly_parse_config "$config_file" "$plugin_name"; then
+    return 1
+  fi
+
+  # Get configuration values with defaults
+  local cooldown
+  cooldown=$(anomaly_get_config_value "$plugin_name" "cooldown" "1800")
+
+  local notification_threshold
+  notification_threshold=$(anomaly_get_config_value "$plugin_name" "notification_threshold" "3")
+
   # Check cooldown
   local last_notification_file="$ANOMALY_RESULTS_DIR/${plugin_name}_last_notification"
-  if [ -f "$last_notification_file" ]; then
+  if util_validate_file_exists "$last_notification_file" "Last notification file"; then
     local last_notification
     last_notification=$(cat "$last_notification_file")
     local current_time
     current_time=$(date +%s)
     local time_diff=$((current_time - last_notification))
 
-    if [ "$time_diff" -lt "$cooldown" ]; then
+    if [[ "$time_diff" -lt "$cooldown" ]]; then
       log_debug "Anomaly notification for $plugin_name is in cooldown"
       return 1
     fi
@@ -511,25 +534,33 @@ should_send_anomaly_notification() {
 
   # Check consecutive anomaly threshold
   local consecutive_anomalies
-  consecutive_anomalies=$(get_consecutive_anomaly_count "$plugin_name")
+  consecutive_anomalies=$(anomaly_get_consecutive_count "$plugin_name")
 
-  if [ "$consecutive_anomalies" -ge "$notification_threshold" ]; then
+  if [[ "$consecutive_anomalies" -ge "$notification_threshold" ]]; then
     # Update last notification time
-    date +%s >"$last_notification_file"
+    if ! echo "$(date +%s)" >"$last_notification_file"; then
+      log_error "Failed to update last notification file: $last_notification_file"
+    fi
     return 0
   fi
 
   return 1
 }
 
-# Get consecutive anomaly count
-get_consecutive_anomaly_count() {
+# Get consecutive anomaly count - REFACTORED
+anomaly_get_consecutive_count() {
   local plugin_name="$1"
+
+  if ! util_require_param "$plugin_name" "plugin_name"; then
+    echo "0"
+    return
+  fi
+
   local today
   today=$(date +%Y%m%d)
   local result_file="$ANOMALY_RESULTS_DIR/${plugin_name}_${today}.log"
 
-  if [ ! -f "$result_file" ]; then
+  if ! util_validate_file_exists "$result_file" "Anomaly result file"; then
     echo "0"
     return
   fi
@@ -538,44 +569,108 @@ get_consecutive_anomaly_count() {
   local count=0
   local max_check=10 # Check last 10 entries
 
-  tail -n "$max_check" "$result_file" | tac | while read -r line; do
-    if echo "$line" | jq -e '.is_anomaly == true' >/dev/null 2>&1; then
-      count=$((count + 1))
-    else
-      break
-    fi
-  done | tail -n 1
+  # Use safer file reading
+  if command_exists tail && command_exists tac; then
+    tail -n "$max_check" "$result_file" | tac | while read -r line; do
+      if [[ -n "$line" ]] && echo "$line" | jq -e '.is_anomaly == true' >/dev/null 2>&1; then
+        count=$((count + 1))
+      else
+        break
+      fi
+    done | tail -n 1
+  else
+    # Fallback method
+    echo "0"
+  fi
 
   echo "${count:-0}"
 }
 
-# Send anomaly notification
-send_anomaly_notification() {
+# Send anomaly notification - REFACTORED
+anomaly_send_notification() {
   local plugin_name="$1"
   local anomaly_result="$2"
 
-  if ! command -v jq >/dev/null 2>&1; then
+  if ! util_require_param "$plugin_name" "plugin_name"; then
+    return 1
+  fi
+
+  if ! util_require_param "$anomaly_result" "anomaly_result"; then
+    return 1
+  fi
+
+  if ! command_exists jq; then
     log_warning "jq not available for anomaly notification"
     return 1
   fi
 
-  # Extract anomaly details
-  local current_value anomaly_type anomaly_score
-  current_value=$(echo "$anomaly_result" | jq -r '.current_value')
-  anomaly_type=$(echo "$anomaly_result" | jq -r '.anomaly_type')
-  anomaly_score=$(echo "$anomaly_result" | jq -r '.anomaly_score')
+  # Validate JSON input
+  if ! util_json_validate "$anomaly_result"; then
+    log_error "Invalid JSON in anomaly result"
+    return 1
+  fi
 
-  # Create notification message
-  local message="Anomaly detected in $plugin_name: Value $current_value (Score: $anomaly_score, Type: $anomaly_type)"
+  # Extract anomaly details using utility functions
+  local current_value
+  current_value=$(util_json_get_value "$anomaly_result" "current_value")
+
+  local anomaly_type
+  anomaly_type=$(util_json_get_value "$anomaly_result" "anomaly_type")
+
+  local anomaly_score
+  anomaly_score=$(util_json_get_value "$anomaly_result" "anomaly_score")
+
+  # Create notification message with proper escaping
+  local message="Anomaly detected in $(util_json_escape "$plugin_name"): Value $current_value (Score: $anomaly_score, Type: $anomaly_type)"
 
   # Send notification if notification system is available
   if declare -f send_notification >/dev/null; then
     send_notification 1 "$message" "anomaly" "$anomaly_result"
+    log_info "Sent anomaly notification for $plugin_name"
   else
     log_warning "Notification system not available for anomaly: $plugin_name"
+    return 1
   fi
 
-  log_info "Sent anomaly notification for $plugin_name"
+  return 0
+}
+
+# === BACKWARD COMPATIBILITY FUNCTIONS ===
+
+# Backward compatibility: parse_anomaly_config
+parse_anomaly_config() {
+  log_warning "Function parse_anomaly_config() is deprecated, use anomaly_parse_config() instead"
+  local config_file="$1"
+
+  # Extract plugin name from filename for new function
+  local plugin_name
+  plugin_name=$(basename "$config_file" | sed 's/_anomaly.conf//')
+
+  anomaly_parse_config "$config_file" "$plugin_name"
+}
+
+# Backward compatibility: run_anomaly_detection
+run_anomaly_detection() {
+  log_warning "Function run_anomaly_detection() is deprecated, use anomaly_run_detection() instead"
+  anomaly_run_detection "$@"
+}
+
+# Backward compatibility: should_send_anomaly_notification
+should_send_anomaly_notification() {
+  log_warning "Function should_send_anomaly_notification() is deprecated, use anomaly_should_send_notification() instead"
+  anomaly_should_send_notification "$@"
+}
+
+# Backward compatibility: get_consecutive_anomaly_count
+get_consecutive_anomaly_count() {
+  log_warning "Function get_consecutive_anomaly_count() is deprecated, use anomaly_get_consecutive_count() instead"
+  anomaly_get_consecutive_count "$@"
+}
+
+# Backward compatibility: send_anomaly_notification
+send_anomaly_notification() {
+  log_warning "Function send_anomaly_notification() is deprecated, use anomaly_send_notification() instead"
+  anomaly_send_notification "$@"
 }
 
 # Get anomaly detection summary

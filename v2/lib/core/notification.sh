@@ -11,8 +11,12 @@ NOTIFICATION_CONFIG_DIR="${BASE_DIR}/config/notifications"
 # Array to store registered notification providers
 declare -a registered_providers
 
-# Initialize notification system
-init_notification_system() {
+# New standardized function: notification_system_init
+# Description: Initialize notification system with enhanced error handling
+# Returns:
+#   0 - success
+#   1 - failure
+notification_system_init() {
   log_debug "Initializing notification system"
 
   # Make sure notification directories exist
@@ -33,7 +37,7 @@ init_notification_system() {
 
   # Check if notifications are enabled
   local notification_enabled
-  notification_enabled=$(get_config "notification_enabled" "true")
+  notification_enabled=$(config_get_value "notification_enabled" "false")
 
   if [ "$notification_enabled" != "true" ]; then
     log_info "Notifications are disabled in configuration"
@@ -42,7 +46,7 @@ init_notification_system() {
 
   # Load enabled notification channels from configuration
   local notification_channels
-  notification_channels=$(get_config "notification_channels" "")
+  notification_channels=$(config_get_value "notification_channels" "")
 
   # Convert comma/space/brackets separated string to array
   local channel_list
@@ -66,6 +70,12 @@ init_notification_system() {
   return 0
 }
 
+# Backward compatibility: init_notification_system
+init_notification_system() {
+  log_warning "Function init_notification_system() is deprecated, use notification_system_init() instead"
+  notification_system_init "$@"
+}
+
 # Load a notification provider
 load_notification_provider() {
   local provider_name="$1"
@@ -86,7 +96,7 @@ load_notification_provider() {
   register_notification_provider "$provider_name" || return 1
 
   # Configure the provider
-  ${provider_name}_provider_configure "$provider_config" || {
+  "${provider_name}"_provider_configure "$provider_config" || {
     log_error "Failed to configure notification provider: $provider_name"
     return 1
   }
@@ -119,7 +129,7 @@ register_notification_provider() {
 
   # Get provider info
   local provider_info
-  provider_info=$(${provider_name}_provider_info)
+  provider_info=$("${provider_name}"_provider_info)
 
   # Add to registered providers
   registered_providers+=("$provider_name")
@@ -137,7 +147,7 @@ send_notification() {
 
   # Check if notifications are enabled
   local notification_enabled
-  notification_enabled=$(get_config "notification_enabled" "true")
+  notification_enabled=$(config_get_value "notification_enabled" "false")
 
   if [ "$notification_enabled" != "true" ]; then
     log_debug "Notifications are disabled, skipping"
@@ -157,7 +167,7 @@ send_notification() {
   for provider_name in "${registered_providers[@]}"; do
     log_debug "Sending notification via $provider_name"
 
-    if ! ${provider_name}_provider_send "$status_code" "$status_message" "$plugin_name" "$details"; then
+    if ! "${provider_name}"_provider_send "$status_code" "$status_message" "$plugin_name" "$details"; then
       log_error "Failed to send notification via $provider_name"
       failed=$((failed + 1))
     fi
@@ -171,3 +181,15 @@ send_notification() {
   log_debug "Notification sent successfully to all providers"
   return 0
 }
+
+# Export functions for cross-shell availability
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  export -f notification_system_init
+  export -f load_notification_provider
+  export -f validate_notification_provider
+  export -f register_notification_provider
+  export -f send_notification
+
+  # Export backward compatibility functions
+  export -f init_notification_system
+fi

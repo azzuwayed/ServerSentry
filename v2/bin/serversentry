@@ -10,44 +10,87 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Source core components
-source "$BASE_DIR/lib/core/config.sh"
+# Source core components in proper order
+source "$BASE_DIR/lib/core/logging.sh" # Load logging first
+source "$BASE_DIR/lib/core/utils.sh"   # Load utilities second
+source "$BASE_DIR/lib/core/config.sh"  # Load config third
 
-# Load configuration before logging is initialized
-if ! load_config; then
-  echo "Failed to load configuration" >&2
+# Initialize logging system first
+if ! logging_init; then
+  echo "FATAL: Failed to initialize logging system" >&2
   exit 1
 fi
 
-source "$BASE_DIR/lib/core/logging.sh"
+# Load configuration with new standardized function
+if ! config_load; then
+  log_error "Failed to load configuration"
+  exit 1
+fi
+
+# Source remaining components
 source "$BASE_DIR/lib/core/plugin.sh"
-source "$BASE_DIR/lib/core/utils.sh"
 source "$BASE_DIR/lib/core/notification.sh"
 source "$BASE_DIR/lib/ui/cli/commands.sh"
 
-# Main function
+# Main function with enhanced error handling
 main() {
-  # Initialize the application
+  # Initialize the application with proper logging
   log_info "Starting ServerSentry v2"
+  log_debug "Base directory: $BASE_DIR"
+  log_debug "Configuration loaded from: $(config_get_value 'config_file' 'default')"
 
-  # Initialize plugin system
-  if ! init_plugin_system; then
+  # Initialize plugin system with new standardized function
+  if ! plugin_system_init; then
     log_error "Failed to initialize plugin system"
     exit 1
   fi
 
-  # Initialize notification system
-  if ! init_notification_system; then
+  local loaded_plugins
+  loaded_plugins=$(plugin_list_loaded | wc -l)
+  log_info "Plugin system initialized with $loaded_plugins plugins"
+
+  # Initialize notification system with new standardized function
+  if ! notification_system_init; then
     log_error "Failed to initialize notification system"
     # Non-fatal error, continue without notifications
     log_warning "Continuing without notification support"
+  else
+    log_info "Notification system initialized successfully"
   fi
 
-  # Process command line arguments
-  process_commands "$@"
+  # Log system status
+  log_info "System Status:"
+  log_info "- Log Level: $(logging_get_level)"
+  log_info "- Config Namespace: $(config_get_value 'namespace' 'config')"
+  log_info "- Plugins Enabled: $(config_get_value 'plugins_enabled' 'none')"
+  log_info "- Notifications Enabled: $(config_get_value 'notification_enabled' 'false')"
 
-  log_info "ServerSentry v2 finished"
+  # Process command line arguments
+  if ! process_commands "$@"; then
+    log_error "Command processing failed"
+    exit 1
+  fi
+
+  log_info "ServerSentry v2 finished successfully"
 }
+
+# Trap for cleanup
+cleanup() {
+  local exit_code=$?
+  log_debug "Performing cleanup (exit code: $exit_code)"
+
+  # Add any cleanup operations here
+  if [[ "$exit_code" -ne 0 ]]; then
+    log_error "ServerSentry exited with error code: $exit_code"
+  fi
+
+  exit "$exit_code"
+}
+
+# Set up signal handlers
+trap cleanup EXIT
+trap 'log_warning "Received SIGINT, shutting down..."; exit 130' INT
+trap 'log_warning "Received SIGTERM, shutting down..."; exit 143' TERM
 
 # Run the main function with all arguments
 main "$@"
