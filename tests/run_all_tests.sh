@@ -11,14 +11,22 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." &>/dev/null && pwd)"
 
-# Define colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+# Source standardized color functions
+if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
+  source "$BASE_DIR/lib/ui/cli/colors.sh"
+else
+  # Fallback definitions if colors.sh not available
+  print_success() { echo "✅ $*"; }
+  print_error() { echo "❌ $*"; }
+  print_warning() { echo "⚠️ $*"; }
+  print_info() { echo "ℹ️ $*"; }
+  print_header() { echo "$*"; }
+  print_status() {
+    shift
+    echo "$*"
+  }
+  print_separator() { echo "═══════════════════════════════════════════════════════════════"; }
+fi
 
 # Test results tracking
 TOTAL_TESTS=0
@@ -32,12 +40,17 @@ run_test_suite() {
   local test_script="$2"
   local test_type="$3"
 
-  echo -e "\n${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-  echo -e "${CYAN}Running $test_type: $test_name${NC}"
-  echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+  echo ""
+  print_separator
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo -e "${INFO_COLOR}Running $test_type: $test_name${RESET}"
+  else
+    echo "Running $test_type: $test_name"
+  fi
+  print_separator
 
   if [[ ! -f "$test_script" ]]; then
-    echo -e "${RED}❌ Test script not found: $test_script${NC}"
+    print_error "Test script not found: $test_script"
     FAILED_SUITES+=("$test_name (script not found)")
     return 1
   fi
@@ -72,22 +85,26 @@ run_test_suite() {
 
   # Display results
   if [[ $exit_code -eq 0 ]]; then
-    echo -e "${GREEN}✅ $test_name PASSED${NC} (${tests_run} tests, ${duration}s)"
+    print_success "$test_name PASSED (${tests_run} tests, ${duration}s)"
     if [[ $tests_failed -gt 0 ]]; then
-      echo -e "${YELLOW}   ⚠️  Warning: $tests_failed tests failed but suite passed${NC}"
+      print_warning "Warning: $tests_failed tests failed but suite passed"
     fi
   else
-    echo -e "${RED}❌ $test_name FAILED${NC} (exit code: $exit_code, ${duration}s)"
+    print_error "$test_name FAILED (exit code: $exit_code, ${duration}s)"
     FAILED_SUITES+=("$test_name")
 
     # Show last few lines of output for failed tests
-    echo -e "${YELLOW}Last few lines of output:${NC}"
+    print_warning "Last few lines of output:"
     echo "$test_output" | tail -10 | sed 's/^/  /'
   fi
 
   # Show detailed breakdown
   if [[ $tests_run -gt 0 ]]; then
-    echo -e "   Tests: ${BLUE}$tests_run${NC} | Passed: ${GREEN}$tests_passed${NC} | Failed: ${RED}$tests_failed${NC}"
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      echo -e "   Tests: ${INFO_COLOR}$tests_run${RESET} | Passed: ${SUCCESS_COLOR}$tests_passed${RESET} | Failed: ${ERROR_COLOR}$tests_failed${RESET}"
+    else
+      echo "   Tests: $tests_run | Passed: $tests_passed | Failed: $tests_failed"
+    fi
   fi
 
   return $exit_code
@@ -95,35 +112,54 @@ run_test_suite() {
 
 # Function to print summary
 print_summary() {
-  echo -e "\n${PURPLE}═══════════════════════════════════════════════════════════════${NC}"
-  echo -e "${PURPLE}               TEST SUITE SUMMARY REPORT${NC}"
-  echo -e "${PURPLE}═══════════════════════════════════════════════════════════════${NC}"
+  echo ""
+  print_separator
+  print_header "TEST SUITE SUMMARY REPORT" 64
+  print_separator
 
-  echo -e "\n${BLUE}Overall Results:${NC}"
-  echo -e "  Total Tests: ${BLUE}$TOTAL_TESTS${NC}"
-  echo -e "  Tests Passed: ${GREEN}$TOTAL_PASSED${NC}"
-  echo -e "  Tests Failed: ${RED}$TOTAL_FAILED${NC}"
+  echo ""
+  print_info "Overall Results:"
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo -e "  Total Tests: ${INFO_COLOR}$TOTAL_TESTS${RESET}"
+    echo -e "  Tests Passed: ${SUCCESS_COLOR}$TOTAL_PASSED${RESET}"
+    echo -e "  Tests Failed: ${ERROR_COLOR}$TOTAL_FAILED${RESET}"
+  else
+    echo "  Total Tests: $TOTAL_TESTS"
+    echo "  Tests Passed: $TOTAL_PASSED"
+    echo "  Tests Failed: $TOTAL_FAILED"
+  fi
 
   if [[ $TOTAL_TESTS -gt 0 ]]; then
     local success_rate=$((TOTAL_PASSED * 100 / TOTAL_TESTS))
-    echo -e "  Success Rate: ${CYAN}${success_rate}%${NC}"
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      echo -e "  Success Rate: ${CYAN}${success_rate}%${RESET}"
+    else
+      echo "  Success Rate: ${success_rate}%"
+    fi
   fi
 
   if [[ ${#FAILED_SUITES[@]} -eq 0 ]]; then
-    echo -e "\n${GREEN}🎉 ALL TEST SUITES PASSED! 🎉${NC}"
-    echo -e "${GREEN}ServerSentry v2 is ready for production!${NC}"
+    echo ""
+    print_success "🎉 ALL TEST SUITES PASSED! 🎉"
+    print_success "ServerSentry v2 is ready for production!"
   else
-    echo -e "\n${RED}❌ Failed Test Suites:${NC}"
+    echo ""
+    print_error "Failed Test Suites:"
     for suite in "${FAILED_SUITES[@]}"; do
-      echo -e "  ${RED}• $suite${NC}"
+      if [[ "$COLOR_SUPPORT" == "true" ]]; then
+        echo -e "  ${ERROR_COLOR}• $suite${RESET}"
+      else
+        echo "  • $suite"
+      fi
     done
-    echo -e "\n${YELLOW}⚠️  Please fix the failing tests before deployment.${NC}"
+    echo ""
+    print_warning "Please fix the failing tests before deployment."
   fi
 }
 
 # Function to check prerequisites
 check_prerequisites() {
-  echo -e "${BLUE}Checking prerequisites...${NC}"
+  print_info "Checking prerequisites..."
 
   local missing_deps=()
 
@@ -135,21 +171,25 @@ check_prerequisites() {
   done
 
   if [[ ${#missing_deps[@]} -gt 0 ]]; then
-    echo -e "${RED}❌ Missing required dependencies:${NC}"
+    print_error "Missing required dependencies:"
     for dep in "${missing_deps[@]}"; do
-      echo -e "  ${RED}• $dep${NC}"
+      if [[ "$COLOR_SUPPORT" == "true" ]]; then
+        echo -e "  ${ERROR_COLOR}• $dep${RESET}"
+      else
+        echo "  • $dep"
+      fi
     done
-    echo -e "${YELLOW}Please install missing dependencies and try again.${NC}"
+    print_warning "Please install missing dependencies and try again."
     return 1
   fi
 
-  echo -e "${GREEN}✅ All prerequisites satisfied${NC}"
+  print_success "All prerequisites satisfied"
   return 0
 }
 
 # Function to setup test environment
 setup_test_environment() {
-  echo -e "${BLUE}Setting up test environment...${NC}"
+  print_info "Setting up test environment..."
 
   # Ensure log directory exists
   mkdir -p "$BASE_DIR/logs"
@@ -162,12 +202,12 @@ setup_test_environment() {
   export SERVERSENTRY_TEST_MODE=1
   export BASE_DIR="$BASE_DIR"
 
-  echo -e "${GREEN}✅ Test environment ready${NC}"
+  print_success "Test environment ready"
 }
 
 # Function to cleanup test environment
 cleanup_test_environment() {
-  echo -e "${BLUE}Cleaning up test environment...${NC}"
+  print_info "Cleaning up test environment..."
 
   # Remove test artifacts
   rm -f "$BASE_DIR"/[0-9][0-9] 2>/dev/null || true
@@ -176,13 +216,13 @@ cleanup_test_environment() {
   # Unset test environment variables
   unset SERVERSENTRY_TEST_MODE
 
-  echo -e "${GREEN}✅ Test environment cleaned${NC}"
+  print_success "Test environment cleaned"
 }
 
 # Main execution
 main() {
-  echo -e "${PURPLE}ServerSentry v2 - Comprehensive Test Suite${NC}"
-  echo -e "${PURPLE}===========================================${NC}"
+  print_header "ServerSentry v2 - Comprehensive Test Suite" 64
+  print_separator
 
   # Check prerequisites
   if ! check_prerequisites; then
@@ -195,14 +235,24 @@ main() {
   local start_time=$(date +%s)
 
   # Run unit tests
-  echo -e "\n${CYAN}🧪 RUNNING UNIT TESTS${NC}"
+  echo ""
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo -e "${INFO_COLOR}🧪 RUNNING UNIT TESTS${RESET}"
+  else
+    echo "🧪 RUNNING UNIT TESTS"
+  fi
   run_test_suite "Security Tests" "$SCRIPT_DIR/unit/security_test.sh" "Security Unit Test"
   run_test_suite "Utils Tests" "$SCRIPT_DIR/unit/utils_test.sh" "Utilities Unit Test"
   run_test_suite "Composite Tests" "$SCRIPT_DIR/unit/composite_test.sh" "Composite System Unit Test"
   run_test_suite "Logging Tests" "$SCRIPT_DIR/unit/logging_test.sh" "Logging System Unit Test"
 
   # Run integration tests
-  echo -e "\n${CYAN}🔗 RUNNING INTEGRATION TESTS${NC}"
+  echo ""
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo -e "${INFO_COLOR}🔗 RUNNING INTEGRATION TESTS${RESET}"
+  else
+    echo "🔗 RUNNING INTEGRATION TESTS"
+  fi
   run_test_suite "Basic Integration" "$SCRIPT_DIR/integration/basic_test.sh" "Basic Integration Test"
   run_test_suite "Security Integration" "$SCRIPT_DIR/integration/security_integration_test.sh" "Security Integration Test"
 
@@ -216,7 +266,12 @@ main() {
   # Print final summary
   print_summary
 
-  echo -e "\n${BLUE}Total execution time: ${total_duration}s${NC}"
+  echo ""
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo -e "${INFO_COLOR}Total execution time: ${total_duration}s${RESET}"
+  else
+    echo "Total execution time: ${total_duration}s"
+  fi
 
   # Exit with appropriate code
   if [[ ${#FAILED_SUITES[@]} -eq 0 ]]; then
@@ -252,7 +307,12 @@ case "${1:-}" in
   ;;
 --unit)
   check_prerequisites && setup_test_environment
-  echo -e "\n${CYAN}🧪 RUNNING UNIT TESTS${NC}"
+  echo ""
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo -e "${INFO_COLOR}🧪 RUNNING UNIT TESTS${RESET}"
+  else
+    echo "🧪 RUNNING UNIT TESTS"
+  fi
   run_test_suite "Security Tests" "$SCRIPT_DIR/unit/security_test.sh" "Security Unit Test"
   run_test_suite "Utils Tests" "$SCRIPT_DIR/unit/utils_test.sh" "Utilities Unit Test"
   run_test_suite "Composite Tests" "$SCRIPT_DIR/unit/composite_test.sh" "Composite System Unit Test"
@@ -262,7 +322,12 @@ case "${1:-}" in
   ;;
 --integration)
   check_prerequisites && setup_test_environment
-  echo -e "\n${CYAN}🔗 RUNNING INTEGRATION TESTS${NC}"
+  echo ""
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo -e "${INFO_COLOR}🔗 RUNNING INTEGRATION TESTS${RESET}"
+  else
+    echo "🔗 RUNNING INTEGRATION TESTS"
+  fi
   run_test_suite "Basic Integration" "$SCRIPT_DIR/integration/basic_test.sh" "Basic Integration Test"
   run_test_suite "Security Integration" "$SCRIPT_DIR/integration/security_integration_test.sh" "Security Integration Test"
   cleanup_test_environment

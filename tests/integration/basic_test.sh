@@ -10,15 +10,20 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
+# Source standardized color functions
+if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
+  source "$BASE_DIR/lib/ui/cli/colors.sh"
+else
+  # Fallback definitions if colors.sh not available
+  print_success() { echo "PASS: $*"; }
+  print_error() { echo "FAIL: $*"; }
+  print_warning() { echo "WARN: $*"; }
+  print_info() { echo "INFO: $*"; }
+fi
+
 # Set up test environment
 echo "Setting up test environment..."
 mkdir -p "$BASE_DIR/logs"
-
-# Define test output color functions
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
 
 # Test function
 run_test() {
@@ -36,11 +41,20 @@ run_test() {
 
   # Check if exit code matches expected
   if [ $exit_code -eq "$expected_exit_code" ]; then
-    echo -e "${GREEN}PASS${NC}"
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      echo -e "${SUCCESS_COLOR}PASS${RESET}"
+    else
+      echo "PASS"
+    fi
     return 0
   else
-    echo -e "${RED}FAIL${NC} (expected: $expected_exit_code, got: $exit_code)"
-    echo -e "${YELLOW}Command output:${NC}"
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      echo -e "${ERROR_COLOR}FAIL${RESET} (expected: $expected_exit_code, got: $exit_code)"
+      echo -e "${WARNING_COLOR}Command output:${RESET}"
+    else
+      echo "FAIL (expected: $expected_exit_code, got: $exit_code)"
+      echo "Command output:"
+    fi
     cat /tmp/serversentry_test_output
     return 1
   fi

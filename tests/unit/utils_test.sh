@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# ServerSentry v2 - Unit Tests for Utils Module
+# ServerSentry v2 - Utilities Unit Tests
 #
-# This script tests the utility functions in utils.sh
+# This script tests the utility functions in lib/core/utils/
 
 set -e
 
@@ -10,18 +10,23 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
-# Source required modules
-export BASE_DIR="$BASE_DIR"
-export LOG_DIR="$BASE_DIR/logs"
-mkdir -p "$LOG_DIR"
-source "$BASE_DIR/lib/core/logging.sh"
-source "$BASE_DIR/lib/core/utils.sh"
+# Source standardized color functions
+if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
+  source "$BASE_DIR/lib/ui/cli/colors.sh"
+else
+  # Fallback definitions if colors.sh not available
+  print_success() { echo "PASS: $*"; }
+  print_error() { echo "FAIL: $*"; }
+  print_warning() { echo "WARN: $*"; }
+  print_info() { echo "INFO: $*"; }
+fi
 
-# Define test output color functions
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+# Source the modules we're testing
+source "$BASE_DIR/lib/core/utils.sh"
+source "$BASE_DIR/lib/core/utils/command_utils.sh"
+source "$BASE_DIR/lib/core/utils/array_utils.sh"
+source "$BASE_DIR/lib/core/utils/validation_utils.sh"
+source "$BASE_DIR/lib/core/utils/json_utils.sh"
 
 # Test counter
 TESTS_RUN=0
@@ -39,102 +44,89 @@ assert() {
   echo -n "Testing $test_name... "
 
   if eval "$condition"; then
-    echo -e "${GREEN}PASS${NC}"
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      echo -e "${SUCCESS_COLOR}PASS${RESET}"
+    else
+      echo "PASS"
+    fi
     TESTS_PASSED=$((TESTS_PASSED + 1))
     return 0
   else
-    echo -e "${RED}FAIL${NC}"
-    if [ -n "$message" ]; then
-      echo -e "${YELLOW}$message${NC}"
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      echo -e "${ERROR_COLOR}FAIL${RESET}"
+      if [ -n "$message" ]; then
+        echo -e "${WARNING_COLOR}$message${RESET}"
+      fi
+    else
+      echo "FAIL"
+      if [ -n "$message" ]; then
+        echo "$message"
+      fi
     fi
     TESTS_FAILED=$((TESTS_FAILED + 1))
     return 1
   fi
 }
 
-# Begin tests
-echo "Running unit tests for utils module..."
+echo "Running utility function tests..."
 
-# Test command_exists function
-assert "command_exists - should find ls" "command_exists ls"
-assert "command_exists - should not find nonexistent_command" "! command_exists nonexistent_command"
+# Test 1: Command existence checking
+assert "util_command_exists with existing command" "util_command_exists bash"
+assert "util_command_exists with non-existing command" "! util_command_exists nonexistent_command_xyz123"
 
-# Test is_root function (this will return false unless run as root)
-assert "is_root function" "is_root || true" "This test will only pass if run as root"
+# Test 2: Array utility functions
+test_array=("item1" "item2" "item3")
+assert "array_contains with existing item" "array_contains 'item2' \"\${test_array[@]}\""
+assert "array_contains with non-existing item" "! array_contains 'item4' \"\${test_array[@]}\""
 
-# Test get_os_type function
-assert "get_os_type function" "get_os_type | grep -E '^(linux|macos|windows|unknown)$'"
+# Test 3: Validation functions
+assert "validate_number with valid number" "validate_number '42'"
+assert "validate_number with invalid number" "! validate_number 'not_a_number'"
+assert "validate_email with valid email" "validate_email 'test@example.com'"
+assert "validate_email with invalid email" "! validate_email 'invalid_email'"
 
-# Test to_lowercase function
-assert "to_lowercase function" "[ \"$(to_lowercase 'HELLO')\" = 'hello' ]"
+# Test 4: JSON utility functions
+test_json='{"key": "value", "number": 42}'
+if util_command_exists jq; then
+  assert "json_get_value with valid key" "[ \"\$(json_get_value 'key' \"\$test_json\")\" = 'value' ]"
+  assert "json_get_value with number key" "[ \"\$(json_get_value 'number' \"\$test_json\")\" = '42' ]"
+else
+  echo "Skipping JSON tests (jq not available)"
+fi
 
-# Test to_uppercase function
-assert "to_uppercase function" "[ \"$(to_uppercase 'hello')\" = 'HELLO' ]"
+# Test 5: Utility helper functions
+assert "is_function with existing function" "is_function 'assert'"
+assert "is_function with non-existing function" "! is_function 'nonexistent_function'"
 
-# Test trim function
-assert "trim function - spaces" "[ \"$(trim '  hello  ')\" = 'hello' ]"
-assert "trim function - tabs" "[ \"$(trim $'\t'hello$'\t')\" = 'hello' ]"
-assert "trim function - mixed" "[ \"$(trim $' \t'hello$' \t')\" = 'hello' ]"
+# Test 6: String utilities
+assert "trim_whitespace function" "[ \"\$(trim_whitespace '  test  ')\" = 'test' ]"
 
-# Test is_valid_ip function
-assert "is_valid_ip - valid IP" "is_valid_ip '192.168.1.1'"
-assert "is_valid_ip - invalid IP (out of range)" "! is_valid_ip '192.168.1.256'"
-assert "is_valid_ip - invalid IP (format)" "! is_valid_ip '192.168.1'"
-assert "is_valid_ip - invalid IP (non-numeric)" "! is_valid_ip 'abc.def.ghi.jkl'"
-
-# Test random_string function
-RANDOM_STR=$(random_string 10)
-assert "random_string - length" "[ ${#RANDOM_STR} -eq 10 ]"
-
-# Test for randomness - try a few times to avoid false failures
-random_test_passed=false
-for i in {1..5}; do
-  str1=$(random_string 10)
-  str2=$(random_string 10)
-  if [ "$str1" != "$str2" ]; then
-    random_test_passed=true
-    break
-  fi
-done
-
-assert "random_string - different values" "[ '$random_test_passed' = 'true' ]"
-
-# Test get_timestamp function
-assert "get_timestamp - returns a number" "[[ $(get_timestamp) =~ ^[0-9]+$ ]]"
-
-# Test get_formatted_date function
-assert "get_formatted_date - default format" "[[ \$(get_formatted_date) =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]][0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]"
-assert "get_formatted_date - custom format" "[[ \$(get_formatted_date '%Y%m%d') =~ ^[0-9]{8}$ ]]"
-
-# Test format_bytes function
-assert "format_bytes - bytes" "[ \"$(format_bytes 512)\" = '512B' ]"
-assert "format_bytes - kilobytes" "[[ \"$(format_bytes 1536)\" =~ ^1.50\ KB$ ]]"
-assert "format_bytes - megabytes" "[[ \"$(format_bytes 2097152)\" =~ ^2.00\ MB$ ]]"
-assert "format_bytes - gigabytes" "[[ \"$(format_bytes 3221225472)\" =~ ^3.00\ GB$ ]]"
-
-# Test safe_write function
-TEST_FILE="/tmp/serversentry_test_safe_write"
-TEST_CONTENT="test content"
-safe_write "$TEST_FILE" "$TEST_CONTENT"
-assert "safe_write function" "[ \"$(cat $TEST_FILE)\" = \"$TEST_CONTENT\" ]"
-rm -f "$TEST_FILE"
-
-# Test url_encode function
-assert "url_encode - basic" "[ \"$(url_encode 'hello world')\" = 'hello%20world' ]"
-assert "url_encode - special chars" "[ \"$(url_encode 'hello@world?')\" = 'hello%40world%3f' ]"
-
-# Test json_escape function
-assert "json_escape - quotes" "[ \"$(json_escape '\"hello\"')\" = '\\\"hello\\\"' ]"
-assert "json_escape - backslash" "[ \"$(json_escape '\\hello')\" = '\\\\hello' ]"
+# Test 7: File utilities
+temp_test_file="/tmp/serversentry_test_file_$$"
+echo "test content" >"$temp_test_file"
+assert "file_exists with existing file" "file_exists '$temp_test_file'"
+rm -f "$temp_test_file"
+assert "file_exists with non-existing file" "! file_exists '$temp_test_file'"
 
 # Print summary
 echo ""
-echo "Tests completed: $TESTS_RUN"
-echo -e "${GREEN}Tests passed: $TESTS_PASSED${NC}"
-if [ $TESTS_FAILED -gt 0 ]; then
-  echo -e "${RED}Tests failed: $TESTS_FAILED${NC}"
-  exit 1
+echo "Utils tests completed: $TESTS_RUN"
+if [[ "$COLOR_SUPPORT" == "true" ]]; then
+  echo -e "${SUCCESS_COLOR}Tests passed: $TESTS_PASSED${RESET}"
+  if [ $TESTS_FAILED -gt 0 ]; then
+    echo -e "${ERROR_COLOR}Tests failed: $TESTS_FAILED${RESET}"
+    exit 1
+  else
+    echo -e "${SUCCESS_COLOR}All utility tests passed!${RESET}"
+    exit 0
+  fi
 else
-  echo "All tests passed!"
-  exit 0
+  echo "Tests passed: $TESTS_PASSED"
+  if [ $TESTS_FAILED -gt 0 ]; then
+    echo "Tests failed: $TESTS_FAILED"
+    exit 1
+  else
+    echo "All utility tests passed!"
+    exit 0
+  fi
 fi

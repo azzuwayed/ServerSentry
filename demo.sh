@@ -6,31 +6,36 @@
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-WHITE='\033[1;37m'
-NC='\033[0m' # No Color
-
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 SERVERSENTRY="$SCRIPT_DIR/bin/serversentry"
 
+# Source standardized color functions
+if [[ -f "$SCRIPT_DIR/lib/ui/cli/colors.sh" ]]; then
+  source "$SCRIPT_DIR/lib/ui/cli/colors.sh"
+else
+  # Fallback definitions if colors.sh not available
+  print_success() { echo "$*"; }
+  print_info() { echo "$*"; }
+  print_warning() { echo "$*"; }
+  print_error() { echo "$*"; }
+  print_header() { echo "$*"; }
+  print_status() {
+    shift
+    echo "$*"
+  }
+fi
+
 # Demo functions
-print_header() {
+demo_print_header() {
   echo ""
-  echo -e "${CYAN}================================================================${NC}"
-  echo -e "${WHITE}  $1${NC}"
-  echo -e "${CYAN}================================================================${NC}"
+  print_header "$1" 64
   echo ""
 }
 
-print_step() {
-  echo -e "${GREEN}➤${NC} ${YELLOW}$1${NC}"
+demo_print_step() {
+  echo ""
+  print_status "info" "$1"
   echo ""
 }
 
@@ -39,22 +44,26 @@ run_command() {
   local command="$2"
   local show_output="${3:-true}"
 
-  echo -e "${BLUE}$description:${NC}"
-  echo -e "${PURPLE}$ $command${NC}"
+  print_info "$description:"
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo "${DIM}$ $command${RESET}"
+  else
+    echo "$ $command"
+  fi
 
   if [ "$show_output" = "true" ]; then
-    eval "$command" || echo -e "${RED}Command failed (this may be expected)${NC}"
+    eval "$command" || print_warning "Command failed (this may be expected)"
   else
-    eval "$command" >/dev/null 2>&1 || echo -e "${RED}Command failed${NC}"
+    eval "$command" >/dev/null 2>&1 || print_warning "Command failed"
   fi
   echo ""
 }
 
 # Main demo function
 main() {
-  print_header "ServerSentry v2 - Enterprise Monitoring Demo"
+  demo_print_header "ServerSentry v2 - Enterprise Monitoring Demo"
 
-  echo -e "${WHITE}Welcome to ServerSentry v2!${NC}"
+  print_success "Welcome to ServerSentry v2!"
   echo "This demo showcases the complete feature set including:"
   echo "• Statistical anomaly detection"
   echo "• Comprehensive diagnostics"
@@ -66,78 +75,98 @@ main() {
   read -p "Press Enter to continue..."
 
   # Setup
-  print_step "1. Setting up ServerSentry v2"
+  demo_print_step "1. Setting up ServerSentry v2"
   run_command "Making executable" "chmod +x '$SERVERSENTRY'"
 
-  print_step "2. Version and System Information"
+  demo_print_step "2. Version and System Information"
   run_command "Checking version" "'$SERVERSENTRY' version"
   run_command "System information" "uname -a"
 
   # Core functionality
-  print_step "3. Core Monitoring Features"
+  demo_print_step "3. Core Monitoring Features"
   run_command "Overall system status" "'$SERVERSENTRY' status"
 
-  print_step "4. Individual Plugin Checks"
+  demo_print_step "4. Individual Plugin Checks"
   run_command "CPU monitoring check" "'$SERVERSENTRY' check cpu"
   run_command "Memory monitoring check" "'$SERVERSENTRY' check memory"
   run_command "Disk space monitoring check" "'$SERVERSENTRY' check disk"
   run_command "Process monitoring check" "'$SERVERSENTRY' check process"
 
   # Advanced features
-  print_step "5. Anomaly Detection System"
+  demo_print_step "5. Anomaly Detection System"
   run_command "Test anomaly detection on current metrics" "'$SERVERSENTRY' anomaly test"
   run_command "Show anomaly summary (last 7 days)" "'$SERVERSENTRY' anomaly summary 7"
 
-  print_step "6. Composite Logic Checks"
+  demo_print_step "6. Composite Logic Checks"
   run_command "Test composite checks" "'$SERVERSENTRY' composite test"
 
-  print_step "7. System Diagnostics"
+  demo_print_step "7. System Diagnostics"
   run_command "Quick diagnostic health check" "'$SERVERSENTRY' diagnostics quick"
-  echo -e "${YELLOW}Running full diagnostics (this may take a moment)...${NC}"
+  print_warning "Running full diagnostics (this may take a moment)..."
   run_command "Full system diagnostics" "'$SERVERSENTRY' diagnostics run"
 
-  print_step "8. Notification System"
+  demo_print_step "8. Notification System"
   run_command "Check notification status" "'$SERVERSENTRY' notifications status"
 
-  print_step "9. Template Management"
+  demo_print_step "9. Template Management"
   run_command "List available notification templates" "'$SERVERSENTRY' template list"
 
-  print_step "10. Configuration Management"
+  demo_print_step "10. Configuration Management"
   run_command "Show configuration status" "'$SERVERSENTRY' config status"
 
-  print_step "11. Log Management"
+  demo_print_step "11. Log Management"
   run_command "View recent logs" "'$SERVERSENTRY' logs view | tail -10"
 
   # Advanced configuration examples
-  print_step "12. Advanced Configuration Examples"
+  demo_print_step "12. Advanced Configuration Examples"
 
-  echo -e "${BLUE}Creating a custom composite check:${NC}"
-  echo -e "${PURPLE}$ serversentry composite create demo_check \"cpu.value > 80 AND memory.value > 85\"${NC}"
+  print_info "Creating a custom composite check:"
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo "${DIM}$ serversentry composite create demo_check \"cpu.value > 80 AND memory.value > 85\"${RESET}"
+  else
+    echo "$ serversentry composite create demo_check \"cpu.value > 80 AND memory.value > 85\""
+  fi
   echo "(Demo command - would create composite check)"
   echo ""
 
-  echo -e "${BLUE}Configuring anomaly detection:${NC}"
-  echo -e "${PURPLE}$ serversentry anomaly config cpu${NC}"
+  print_info "Configuring anomaly detection:"
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo "${DIM}$ serversentry anomaly config cpu${RESET}"
+  else
+    echo "$ serversentry anomaly config cpu"
+  fi
   echo "(Would configure CPU anomaly detection)"
   echo ""
 
   # Monitoring demonstration
-  print_step "13. Background Monitoring Demo"
-  echo -e "${YELLOW}ServerSentry can run in the background for continuous monitoring.${NC}"
+  demo_print_step "13. Background Monitoring Demo"
+  print_warning "ServerSentry can run in the background for continuous monitoring."
   echo ""
-  echo -e "${BLUE}To start background monitoring:${NC}"
-  echo -e "${PURPLE}$ serversentry start${NC}"
+  print_info "To start background monitoring:"
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo "${DIM}$ serversentry start${RESET}"
+  else
+    echo "$ serversentry start"
+  fi
   echo ""
-  echo -e "${BLUE}To stop background monitoring:${NC}"
-  echo -e "${PURPLE}$ serversentry stop${NC}"
+  print_info "To stop background monitoring:"
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo "${DIM}$ serversentry stop${RESET}"
+  else
+    echo "$ serversentry stop"
+  fi
   echo ""
-  echo -e "${BLUE}To check if monitoring is running:${NC}"
-  echo -e "${PURPLE}$ serversentry status${NC}"
+  print_info "To check if monitoring is running:"
+  if [[ "$COLOR_SUPPORT" == "true" ]]; then
+    echo "${DIM}$ serversentry status${RESET}"
+  else
+    echo "$ serversentry status"
+  fi
   echo ""
 
   # Performance metrics
-  print_step "14. Performance Characteristics"
-  echo -e "${GREEN}ServerSentry v2 Performance:${NC}"
+  demo_print_step "14. Performance Characteristics"
+  print_success "ServerSentry v2 Performance:"
   echo "• CPU Overhead: <2% during active monitoring"
   echo "• Memory Usage: 2-5MB for advanced features"
   echo "• Storage: ~10KB per plugin per month"
@@ -146,17 +175,17 @@ main() {
   echo ""
 
   # Feature summary
-  print_step "15. Complete Feature Summary"
-  echo -e "${WHITE}ServerSentry v2 includes:${NC}"
+  demo_print_step "15. Complete Feature Summary"
+  print_success "ServerSentry v2 includes:"
   echo ""
-  echo -e "${GREEN}Core Features:${NC}"
+  print_status "ok" "Core Features:"
   echo "✅ 4 core plugins (CPU, Memory, Disk, Process)"
   echo "✅ 5 notification providers (Teams, Slack, Discord, Email, Webhook)"
   echo "✅ JSON API output for all commands"
   echo "✅ YAML configuration management"
   echo "✅ Comprehensive logging system"
   echo ""
-  echo -e "${GREEN}Advanced Features:${NC}"
+  print_status "ok" "Advanced Features:"
   echo "✅ Statistical anomaly detection (Z-score)"
   echo "✅ Composite checks with logical operators"
   echo "✅ Plugin health tracking and performance monitoring"
@@ -164,7 +193,7 @@ main() {
   echo "✅ Comprehensive self-diagnostics"
   echo "✅ Template system for notifications"
   echo ""
-  echo -e "${GREEN}Enterprise Features:${NC}"
+  print_status "ok" "Enterprise Features:"
   echo "✅ Cross-platform compatibility"
   echo "✅ Minimal dependencies (pure Bash)"
   echo "✅ Resource efficient operation"
@@ -172,21 +201,21 @@ main() {
   echo "✅ Automated log rotation"
   echo ""
 
-  print_header "Demo Complete!"
-  echo -e "${GREEN}Thank you for exploring ServerSentry v2!${NC}"
+  demo_print_header "Demo Complete!"
+  print_success "Thank you for exploring ServerSentry v2!"
   echo ""
-  echo -e "${WHITE}Next steps:${NC}"
+  print_info "Next steps:"
   echo "1. Review the configuration in config/serversentry.yaml"
   echo "2. Customize plugin thresholds in config/plugins/"
   echo "3. Set up notification providers in config/notifications/"
   echo "4. Start monitoring with: $SERVERSENTRY start"
   echo ""
-  echo -e "${CYAN}For more information, see the documentation in docs/README.md${NC}"
+  print_info "For more information, see the documentation in docs/README.md"
 }
 
 # Check if ServerSentry executable exists
 if [ ! -f "$SERVERSENTRY" ]; then
-  echo -e "${RED}Error: ServerSentry executable not found at $SERVERSENTRY${NC}"
+  print_error "Error: ServerSentry executable not found at $SERVERSENTRY"
   echo "Please ensure you're running this script from the ServerSentry root directory."
   exit 1
 fi

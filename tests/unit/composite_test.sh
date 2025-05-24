@@ -11,15 +11,20 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
+# Source standardized color functions
+if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
+  source "$BASE_DIR/lib/ui/cli/colors.sh"
+else
+  # Fallback definitions if colors.sh not available
+  print_success() { echo "PASS: $*"; }
+  print_error() { echo "FAIL: $*"; }
+  print_warning() { echo "WARN: $*"; }
+  print_info() { echo "INFO: $*"; }
+fi
+
 # Source the composite module
 source "$BASE_DIR/lib/core/logging.sh"
 source "$BASE_DIR/lib/core/composite.sh"
-
-# Define test output color functions
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
 
 # Test counter
 TESTS_RUN=0
@@ -37,13 +42,24 @@ assert() {
   echo -n "Testing $test_name... "
 
   if eval "$condition"; then
-    echo -e "${GREEN}PASS${NC}"
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      echo -e "${SUCCESS_COLOR}PASS${RESET}"
+    else
+      echo "PASS"
+    fi
     TESTS_PASSED=$((TESTS_PASSED + 1))
     return 0
   else
-    echo -e "${RED}FAIL${NC}"
-    if [ -n "$message" ]; then
-      echo -e "${YELLOW}$message${NC}"
+    if [[ "$COLOR_SUPPORT" == "true" ]]; then
+      echo -e "${ERROR_COLOR}FAIL${RESET}"
+      if [ -n "$message" ]; then
+        echo -e "${WARNING_COLOR}$message${RESET}"
+      fi
+    else
+      echo "FAIL"
+      if [ -n "$message" ]; then
+        echo "$message"
+      fi
     fi
     TESTS_FAILED=$((TESTS_FAILED + 1))
     return 1
@@ -231,11 +247,22 @@ rm -f [0-9][0-9] 2>/dev/null || true
 # Print summary
 echo ""
 echo "Composite check tests completed: $TESTS_RUN"
-echo -e "${GREEN}Tests passed: $TESTS_PASSED${NC}"
-if [ $TESTS_FAILED -gt 0 ]; then
-  echo -e "${RED}Tests failed: $TESTS_FAILED${NC}"
-  exit 1
+if [[ "$COLOR_SUPPORT" == "true" ]]; then
+  echo -e "${SUCCESS_COLOR}Tests passed: $TESTS_PASSED${RESET}"
+  if [ $TESTS_FAILED -gt 0 ]; then
+    echo -e "${ERROR_COLOR}Tests failed: $TESTS_FAILED${RESET}"
+    exit 1
+  else
+    echo -e "${SUCCESS_COLOR}All composite check tests passed!${RESET}"
+    exit 0
+  fi
 else
-  echo "All composite check tests passed!"
-  exit 0
+  echo "Tests passed: $TESTS_PASSED"
+  if [ $TESTS_FAILED -gt 0 ]; then
+    echo "Tests failed: $TESTS_FAILED"
+    exit 1
+  else
+    echo "All composite check tests passed!"
+    exit 0
+  fi
 fi

@@ -10,61 +10,31 @@ if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
   source "$BASE_DIR/lib/core/utils.sh"
 fi
 
+# Source standardized color functions
+if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
+  source "$BASE_DIR/lib/ui/cli/colors.sh"
+fi
+
 # TUI Configuration
 TUI_REFRESH_RATE=2
 TUI_LOG_FILE="${BASE_DIR}/logs/tui.log"
 TUI_STATE_FILE="${BASE_DIR}/logs/tui.state"
 
-# Color definitions for TUI
-if [ -t 1 ] && [ "${TERM:-}" != "dumb" ] && [ "${NO_COLOR:-}" = "" ]; then
-  TUI_RED='\033[0;31m'
-  TUI_GREEN='\033[0;32m'
-  TUI_YELLOW='\033[1;33m'
-  TUI_BLUE='\033[0;34m'
-  TUI_PURPLE='\033[0;35m'
-  TUI_CYAN='\033[0;36m'
-  TUI_WHITE='\033[1;37m'
-  TUI_GRAY='\033[0;37m'
-  TUI_BOLD='\033[1m'
-  TUI_DIM='\033[2m'
-  TUI_NC='\033[0m'
-  TUI_CLEAR='\033[2J'
-  TUI_HOME='\033[H'
-else
-  TUI_RED='' TUI_GREEN='' TUI_YELLOW='' TUI_BLUE='' TUI_PURPLE=''
-  TUI_CYAN='' TUI_WHITE='' TUI_GRAY='' TUI_BOLD='' TUI_DIM=''
-  TUI_NC='' TUI_CLEAR='' TUI_HOME=''
-fi
-
 # Initialize advanced TUI system
 init_advanced_tui() {
   # Check terminal capabilities
   if [[ -t 1 ]] && util_command_exists tput; then
-    # Color support
-    TUI_NC="$(tput sgr0)"
-    TUI_BOLD="$(tput bold)"
-    TUI_DIM="$(tput dim)"
-    TUI_RED="$(tput setaf 1)"
-    TUI_GREEN="$(tput setaf 2)"
-    TUI_YELLOW="$(tput setaf 3)"
-    TUI_BLUE="$(tput setaf 4)"
-    TUI_MAGENTA="$(tput setaf 5)"
-    TUI_CYAN="$(tput setaf 6)"
-    TUI_WHITE="$(tput setaf 7)"
-
-    # Cursor control
+    # Terminal capabilities
     TUI_HOME="$(tput home)"
     TUI_CLEAR="$(tput clear)"
     TUI_SAVE_CURSOR="$(tput sc)"
     TUI_RESTORE_CURSOR="$(tput rc)"
 
-    # Terminal capabilities
+    # Terminal size
     TUI_COLS=$(tput cols 2>/dev/null || echo "80")
     TUI_LINES=$(tput lines 2>/dev/null || echo "24")
   else
     # Fallback for terminals without tput
-    TUI_NC="" TUI_BOLD="" TUI_DIM=""
-    TUI_RED="" TUI_GREEN="" TUI_YELLOW="" TUI_BLUE="" TUI_MAGENTA="" TUI_CYAN="" TUI_WHITE=""
     TUI_HOME="" TUI_CLEAR="clear" TUI_SAVE_CURSOR="" TUI_RESTORE_CURSOR=""
     TUI_COLS=80 TUI_LINES=24
   fi

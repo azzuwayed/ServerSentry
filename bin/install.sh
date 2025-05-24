@@ -13,71 +13,53 @@ BASE_DIR="$(dirname "$SCRIPT_DIR")"
 # Source compatibility utilities
 source "$BASE_DIR/lib/core/utils/compat_utils.sh"
 
+# Source standardized color functions
+if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
+  source "$BASE_DIR/lib/ui/cli/colors.sh"
+else
+  # Fallback definitions if colors.sh not available
+  print_success() { echo "[SUCCESS] $*"; }
+  print_info() { echo "[INFO] $*"; }
+  print_warning() { echo "[WARNING] $*"; }
+  print_error() { echo "[ERROR] $*"; }
+  print_header() { echo "$*"; }
+  print_status() {
+    shift
+    echo "$*"
+  }
+fi
+
 # Enforce root privileges or auto-elevate
 if [ "$(id -u)" -ne 0 ]; then
   if command -v sudo >/dev/null 2>&1; then
-    echo "[INFO] Root privileges are required. Attempting to re-run with sudo..."
+    print_info "Root privileges are required. Attempting to re-run with sudo..."
     exec sudo "$0" "$@"
     exit 1
   else
-    echo "[ERROR] This installer must be run as root. Please re-run as root or with sudo."
+    print_error "This installer must be run as root. Please re-run as root or with sudo."
     exit 1
   fi
 fi
 
-# Define colors for terminal output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-
-# Function to print messages
-print_message() {
-  local level="$1"
-  local message="$2"
-
-  case "$level" in
-  "info")
-    echo -e "${BLUE}[INFO]${NC} $message"
-    ;;
-  "success")
-    echo -e "${GREEN}[SUCCESS]${NC} $message"
-    ;;
-  "warning")
-    echo -e "${YELLOW}[WARNING]${NC} $message"
-    ;;
-  "error")
-    echo -e "${RED}[ERROR]${NC} $message"
-    ;;
-  *)
-    echo -e "$message"
-    ;;
-  esac
-}
-
 # Function to display header
 show_header() {
   clear
-  echo -e "${CYAN}=======================================${NC}"
-  echo -e "${CYAN}    ServerSentry v2 - Installation    ${NC}"
-  echo -e "${CYAN}=======================================${NC}"
+  print_header "ServerSentry v2 - Installation" 64
   echo ""
 }
 
 # Check for required dependencies
 check_dependencies() {
-  print_message "info" "Checking dependencies..."
+  print_info "Checking dependencies..."
 
   local missing_deps=0
   local deps=("bash" "curl" "jq")
 
   for dep in "${deps[@]}"; do
     if compat_command_exists "$dep"; then
-      print_message "success" "✓ $dep is installed"
+      print_status "ok" "$dep is installed"
     else
-      print_message "error" "✗ $dep is not installed"
+      print_status "error" "$dep is not installed"
       missing_deps=$((missing_deps + 1))
     fi
   done
@@ -89,67 +71,67 @@ check_dependencies() {
   bash_major=$(echo "$bash_version" | cut -d. -f1)
 
   if ! compat_bash_is_compatible; then
-    print_message "error" "✗ Bash version $bash_version detected at $bash_path, but version 4.0+ is required"
-    print_message "info" "Detected OS: $(compat_get_os) $(compat_get_os_version)"
-    print_message "info" "Package manager: $(compat_get_package_manager)"
+    print_status "error" "Bash version $bash_version detected at $bash_path, but version 4.0+ is required"
+    print_info "Detected OS: $(compat_get_os) $(compat_get_os_version)"
+    print_info "Package manager: $(compat_get_package_manager)"
 
     case "$(compat_get_package_manager)" in
     brew)
-      print_message "info" "Install newer bash with: brew install bash"
+      print_info "Install newer bash with: brew install bash"
       ;;
     apt)
-      print_message "info" "Your system should have bash 4.0+. Check your PATH."
+      print_info "Your system should have bash 4.0+. Check your PATH."
       ;;
     yum | dnf)
-      print_message "info" "Install newer bash with: $(compat_get_package_manager) install bash"
+      print_info "Install newer bash with: $(compat_get_package_manager) install bash"
       ;;
     *)
-      print_message "info" "Please install bash 4.0+ for your system"
+      print_info "Please install bash 4.0+ for your system"
       ;;
     esac
     missing_deps=$((missing_deps + 1))
   else
-    print_message "success" "✓ Bash version $bash_version is compatible (found at $bash_path)"
+    print_status "ok" "Bash version $bash_version is compatible (found at $bash_path)"
   fi
 
   # Check for optional dependencies
   local opt_deps=("mail" "sendmail")
 
   echo ""
-  print_message "info" "Checking optional dependencies..."
+  print_info "Checking optional dependencies..."
 
   for dep in "${opt_deps[@]}"; do
     if compat_command_exists "$dep"; then
-      print_message "success" "✓ $dep is installed (optional)"
+      print_status "ok" "$dep is installed (optional)"
     else
-      print_message "warning" "✗ $dep is not installed (optional)"
+      print_status "warning" "$dep is not installed (optional)"
     fi
   done
 
   echo ""
   if [ "$missing_deps" -gt 0 ]; then
-    print_message "error" "Please install missing dependencies and run the installer again."
+    print_error "Please install missing dependencies and run the installer again."
     exit 1
   else
-    print_message "success" "All required dependencies are installed."
+    print_success "All required dependencies are installed."
   fi
 }
 
 # Set up directories and permissions
 setup_directories() {
-  print_message "info" "Setting up directories..."
+  print_info "Setting up directories..."
 
   # Create log directory
   compat_mkdir "$BASE_DIR/logs" 755
-  print_message "success" "Created logs directory"
+  print_success "Created logs directory"
 
   # Create log archive directory
   compat_mkdir "$BASE_DIR/logs/archive" 755
-  print_message "success" "Created logs archive directory"
+  print_success "Created logs archive directory"
 
   # Create periodic results directory
   compat_mkdir "$BASE_DIR/logs/periodic" 755
-  print_message "success" "Created periodic results directory"
+  print_success "Created periodic results directory"
 
   # Set permissions using compatibility layer
   compat_chmod 755 "$BASE_DIR/bin/serversentry"
@@ -160,29 +142,29 @@ setup_directories() {
   compat_chmod 755 "$BASE_DIR/logs/archive"
   compat_chmod 755 "$BASE_DIR/logs/periodic"
 
-  print_message "success" "Directories and permissions set up"
+  print_success "Directories and permissions set up"
 }
 
 # Set up configuration files
 setup_configuration() {
-  print_message "info" "Setting up configuration..."
+  print_info "Setting up configuration..."
 
   # Create main config directory if it doesn't exist
   if [ ! -d "$BASE_DIR/config" ]; then
     mkdir -p "$BASE_DIR/config"
-    print_message "success" "Created config directory"
+    print_success "Created config directory"
   fi
 
   # Create plugin config directory if it doesn't exist
   if [ ! -d "$BASE_DIR/config/plugins" ]; then
     mkdir -p "$BASE_DIR/config/plugins"
-    print_message "success" "Created plugin config directory"
+    print_success "Created plugin config directory"
   fi
 
   # Create notification config directory if it doesn't exist
   if [ ! -d "$BASE_DIR/config/notifications" ]; then
     mkdir -p "$BASE_DIR/config/notifications"
-    print_message "success" "Created notification config directory"
+    print_success "Created notification config directory"
   fi
 
   # Create main YAML config file if it doesn't exist
@@ -259,7 +241,7 @@ advanced:
   enable_template_system: true
   enable_diagnostics: true
 EOF
-    print_message "success" "Created main YAML configuration file"
+    print_success "Created main YAML configuration file"
   fi
 
   # Set up sample plugin configurations if they don't exist
@@ -298,16 +280,16 @@ process_check_interval=60
 EOF
         ;;
       esac
-      print_message "success" "Created $plugin plugin configuration"
+      print_success "Created $plugin plugin configuration"
     fi
   done
 
-  print_message "success" "Configuration set up"
+  print_success "Configuration set up"
 }
 
 # Set up cron jobs
 setup_cron() {
-  print_message "info" "Setting up cron jobs..."
+  print_info "Setting up cron jobs..."
 
   # Create a temp file for the new crontab
   local temp_crontab
@@ -318,7 +300,7 @@ setup_cron() {
 
   # Check if our cron job already exists
   if grep -q "serversentry" "$temp_crontab"; then
-    print_message "warning" "ServerSentry cron job already exists"
+    print_warning "ServerSentry cron job already exists"
   else
     # Add our cron job
     echo "# ServerSentry periodic check (every 5 minutes)" >>"$temp_crontab"
@@ -330,7 +312,7 @@ setup_cron() {
 
     # Install the new crontab
     crontab "$temp_crontab"
-    print_message "success" "Cron jobs installed"
+    print_success "Cron jobs installed"
   fi
 
   # Clean up
@@ -339,7 +321,7 @@ setup_cron() {
 
 # Create symbolic link to make serversentry available system-wide
 create_symlink() {
-  print_message "info" "Creating symbolic link..."
+  print_info "Creating symbolic link..."
 
   local bin_dir="/usr/local/bin"
 
@@ -361,17 +343,17 @@ create_symlink() {
   # Check if we have permission to create the symlink
   if [[ -w "$bin_dir" ]]; then
     ln -sf "$BASE_DIR/bin/serversentry" "$bin_dir/serversentry"
-    print_message "success" "Created symbolic link at $bin_dir/serversentry"
+    print_success "Created symbolic link at $bin_dir/serversentry"
   else
-    print_message "warning" "Cannot create symbolic link. Permission denied."
-    print_message "info" "To create the symlink manually, run:"
-    print_message "info" "sudo ln -sf \"$BASE_DIR/bin/serversentry\" \"$bin_dir/serversentry\""
+    print_warning "Cannot create symbolic link. Permission denied."
+    print_info "To create the symlink manually, run:"
+    print_info "sudo ln -sf \"$BASE_DIR/bin/serversentry\" \"$bin_dir/serversentry\""
   fi
 }
 
 # Configure webhooks interactively
 configure_webhooks() {
-  print_message "info" "Configuring webhooks..."
+  print_info "Configuring webhooks..."
 
   echo "Which notification providers would you like to enable?"
   echo "1) Microsoft Teams"
@@ -406,7 +388,7 @@ EOF
         notification_channels="teams"
       fi
 
-      print_message "success" "Teams webhook configured"
+      print_success "Teams webhook configured"
       ;;
 
     2)
@@ -431,7 +413,7 @@ EOF
         notification_channels="slack"
       fi
 
-      print_message "success" "Slack webhook configured"
+      print_success "Slack webhook configured"
       ;;
 
     3)
@@ -455,7 +437,7 @@ EOF
         notification_channels="discord"
       fi
 
-      print_message "success" "Discord webhook configured"
+      print_success "Discord webhook configured"
       ;;
 
     4)
@@ -531,15 +513,15 @@ EOF
         notification_channels="email"
       fi
 
-      print_message "success" "Email notification configured"
+      print_success "Email notification configured"
       ;;
 
     5)
-      print_message "info" "Skipping webhook configuration"
+      print_info "Skipping webhook configuration"
       ;;
 
     *)
-      print_message "warning" "Invalid choice: $choice"
+      print_warning "Invalid choice: $choice"
       ;;
     esac
   done
@@ -547,13 +529,13 @@ EOF
   # Update main config with notification channels
   if [ -n "$notification_channels" ]; then
     compat_sed_inplace "s/notification_channels=.*/notification_channels=$notification_channels/" "$BASE_DIR/config/serversentry.yaml"
-    print_message "success" "Updated notification channels in main configuration"
+    print_success "Updated notification channels in main configuration"
   fi
 }
 
 # Configure process monitoring
 configure_process_monitoring() {
-  print_message "info" "Configuring process monitoring..."
+  print_info "Configuring process monitoring..."
 
   read -p "Would you like to monitor specific processes? (y/n): " -n 1 monitor_processes
   echo ""
@@ -563,16 +545,16 @@ configure_process_monitoring() {
 
     # Update the process plugin configuration
     compat_sed_inplace "s/process_names=.*/process_names=$process_names/" "$BASE_DIR/config/plugins/process.conf"
-    print_message "success" "Process monitoring configured"
+    print_success "Process monitoring configured"
   else
-    print_message "info" "Skipping process monitoring configuration"
+    print_info "Skipping process monitoring configuration"
   fi
 }
 
 # Show usage instructions
 show_usage() {
   echo ""
-  print_message "info" "Installation complete! Here's how to use ServerSentry:"
+  print_info "Installation complete! Here's how to use ServerSentry:"
   echo ""
   echo "Commands:"
   echo "  serversentry status      - Show current system status"
@@ -637,15 +619,15 @@ main() {
       exit 0
       ;;
     *)
-      print_message "error" "Unknown option: $1"
-      print_message "info" "Use --help for usage information"
+      print_error "Unknown option: $1"
+      print_info "Use --help for usage information"
       exit 1
       ;;
     esac
   fi
 
   # Interactive installation
-  print_message "info" "Starting ServerSentry v2 installation..."
+  print_info "Starting ServerSentry v2 installation..."
 
   check_dependencies
   setup_directories
@@ -658,7 +640,7 @@ main() {
   if [[ $setup_webhooks =~ ^[Yy]$ ]]; then
     configure_webhooks
   else
-    print_message "info" "Skipping webhook configuration"
+    print_info "Skipping webhook configuration"
   fi
 
   # Ask if user wants to configure process monitoring
@@ -668,7 +650,7 @@ main() {
   if [[ $setup_process =~ ^[Yy]$ ]]; then
     configure_process_monitoring
   else
-    print_message "info" "Skipping process monitoring configuration"
+    print_info "Skipping process monitoring configuration"
   fi
 
   # Ask if user wants to set up cron jobs
@@ -678,7 +660,7 @@ main() {
   if [[ $setup_cron_jobs =~ ^[Yy]$ ]]; then
     setup_cron
   else
-    print_message "info" "Skipping cron job setup"
+    print_info "Skipping cron job setup"
   fi
 
   # Ask if user wants to create a symbolic link
@@ -688,27 +670,27 @@ main() {
   if [[ $create_link =~ ^[Yy]$ ]]; then
     create_symlink
   else
-    print_message "info" "Skipping symbolic link creation"
+    print_info "Skipping symbolic link creation"
   fi
 
   # Test the installation
-  print_message "info" "Testing the installation..."
+  print_info "Testing the installation..."
   "$BASE_DIR/bin/serversentry" version
 
   if [ $? -eq 0 ]; then
-    print_message "success" "Installation test successful!"
+    print_success "Installation test successful!"
   else
-    print_message "error" "Installation test failed. Please check the logs."
+    print_error "Installation test failed. Please check the logs."
   fi
 
   # Show usage instructions
   show_usage
 
   # Show system compatibility information
-  print_message "info" "System compatibility information:"
+  print_info "System compatibility information:"
   compat_info
 
-  print_message "success" "ServerSentry v2 installation complete!"
+  print_success "ServerSentry v2 installation complete!"
 }
 
 # Run the main function
