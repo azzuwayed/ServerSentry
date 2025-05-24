@@ -1,0 +1,166 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "ShellCheck: Analyze All Scripts",
+            "type": "shell",
+            "command": "./check-lint.sh",
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": {
+                "owner": "shellcheck",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}"
+                ],
+                "pattern": {
+                    "regexp": "^In (.*) line (\\d+):$",
+                    "file": 1,
+                    "line": 2
+                }
+            },
+            "detail": "Run ShellCheck analysis on all bash scripts in the project"
+        },
+        {
+            "label": "Fix: Auto-fix All Bash Scripts",
+            "type": "shell",
+            "command": "./fix-lint.sh",
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "detail": "Automatically fix common bash script issues using ShellCheck and shfmt"
+        },
+        {
+            "label": "ShellCheck: Current File",
+            "type": "shell",
+            "command": "shellcheck",
+            "args": [
+                "${file}"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "shellcheck",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}"
+                ],
+                "pattern": [
+                    {
+                        "regexp": "^In (.*) line (\\d+):$",
+                        "file": 1,
+                        "line": 2
+                    },
+                    {
+                        "regexp": "^(.*)\\s+(SC\\d+)\\s+\\((\\w+)\\):\\s+(.*)$",
+                        "message": 4,
+                        "code": 2,
+                        "severity": 3,
+                        "loop": true
+                    }
+                ]
+            },
+            "detail": "Run ShellCheck on the currently open file"
+        },
+        {
+            "label": "Format: Current Bash File",
+            "type": "shell",
+            "command": "shfmt",
+            "args": [
+                "-w",
+                "-i",
+                "2",
+                "-ci",
+                "-sr",
+                "${file}"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "detail": "Format the currently open bash file with shfmt"
+        },
+        {
+            "label": "Clean: Remove Backup Files",
+            "type": "shell",
+            "command": "find",
+            "args": [
+                ".",
+                "-name",
+                "*.backup",
+                "-delete"
+            ],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": false
+            },
+            "detail": "Remove all .backup files created by the lint fixer"
+        },
+        {
+            "label": "ServerSentry: Run Demo",
+            "type": "shell",
+            "command": "./demo.sh",
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "detail": "Run the ServerSentry demo script"
+        },
+        {
+            "label": "Test: ShellCheck All & Format All",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Fix: Auto-fix All Bash Scripts",
+                "ShellCheck: Analyze All Scripts"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "detail": "Complete workflow: auto-fix all issues, then analyze remaining problems"
+        }
+    ]
+}

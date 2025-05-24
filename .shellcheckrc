@@ -1,0 +1,9 @@
+# ShellCheck configuration for ServerSentry
+# Disable certain warnings that are expected in this project
+
+# SC1091: Not following sourced files (expected for modular design)
+disable=SC1091
+
+# SC2034: Variable appears unused (some variables are used in sourced files)
+# Uncomment if you want to disable this warning globally
+# disable=SC1091,SC2034 

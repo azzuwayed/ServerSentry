@@ -1,0 +1,35 @@
+[
+    {
+        "key": "ctrl+shift+l",
+        "command": "workbench.action.tasks.runTask",
+        "args": "ShellCheck: Current File",
+        "when": "editorLangId == shellscript"
+    },
+    {
+        "key": "ctrl+shift+f",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Format: Current Bash File",
+        "when": "editorLangId == shellscript"
+    },
+    {
+        "key": "ctrl+shift+a",
+        "command": "workbench.action.tasks.runTask",
+        "args": "ShellCheck: Analyze All Scripts"
+    },
+    {
+        "key": "ctrl+shift+x",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Fix: Auto-fix All Bash Scripts"
+    },
+    {
+        "key": "ctrl+shift+t",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Test: ShellCheck All & Format All"
+    },
+    {
+        "key": "f5",
+        "command": "workbench.action.tasks.runTask",
+        "args": "ServerSentry: Run Demo",
+        "when": "resourceFilename == demo.sh"
+    }
+]

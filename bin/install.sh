@@ -7,7 +7,7 @@
 set -eo pipefail
 
 # Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Source compatibility utilities
@@ -31,7 +31,7 @@ fi
 
 # Enforce root privileges or auto-elevate
 if [ "$(id -u)" -ne 0 ]; then
-  if command -v sudo >/dev/null 2>&1; then
+  if command -v sudo > /dev/null 2>&1; then
     print_info "Root privileges are required. Attempting to re-run with sudo..."
     exec sudo "$0" "$@"
     exit 1
@@ -68,6 +68,9 @@ check_dependencies() {
   local bash_path bash_version bash_major
   bash_path=$(compat_get_bash_path)
   bash_version=$(compat_get_bash_version)
+  # shellcheck disable=SC2034
+  # shellcheck disable=SC2034
+# shellcheck disable=SC2034
   bash_major=$(echo "$bash_version" | cut -d. -f1)
 
   if ! compat_bash_is_compatible; then
@@ -76,18 +79,18 @@ check_dependencies() {
     print_info "Package manager: $(compat_get_package_manager)"
 
     case "$(compat_get_package_manager)" in
-    brew)
-      print_info "Install newer bash with: brew install bash"
-      ;;
-    apt)
-      print_info "Your system should have bash 4.0+. Check your PATH."
-      ;;
-    yum | dnf)
-      print_info "Install newer bash with: $(compat_get_package_manager) install bash"
-      ;;
-    *)
-      print_info "Please install bash 4.0+ for your system"
-      ;;
+      brew)
+        print_info "Install newer bash with: brew install bash"
+        ;;
+      apt)
+        print_info "Your system should have bash 4.0+. Check your PATH."
+        ;;
+      yum | dnf)
+        print_info "Install newer bash with: $(compat_get_package_manager) install bash"
+        ;;
+      *)
+        print_info "Please install bash 4.0+ for your system"
+        ;;
     esac
     missing_deps=$((missing_deps + 1))
   else
@@ -169,7 +172,7 @@ setup_configuration() {
 
   # Create main YAML config file if it doesn't exist
   if [ ! -f "$BASE_DIR/config/serversentry.yaml" ]; then
-    cat >"$BASE_DIR/config/serversentry.yaml" <<EOF
+    cat > "$BASE_DIR/config/serversentry.yaml" << EOF
 # ServerSentry v2 Configuration
 # Main configuration file for the ServerSentry monitoring system
 
@@ -250,35 +253,35 @@ EOF
   for plugin in "${plugins[@]}"; do
     if [ ! -f "$BASE_DIR/config/plugins/${plugin}.conf" ]; then
       case "$plugin" in
-      cpu)
-        cat >"$BASE_DIR/config/plugins/${plugin}.conf" <<EOF
+        cpu)
+          cat > "$BASE_DIR/config/plugins/${plugin}.conf" << EOF
 # CPU Plugin Configuration
 cpu_threshold=80
 cpu_warning_threshold=70
 EOF
-        ;;
-      memory)
-        cat >"$BASE_DIR/config/plugins/${plugin}.conf" <<EOF
+          ;;
+        memory)
+          cat > "$BASE_DIR/config/plugins/${plugin}.conf" << EOF
 # Memory Plugin Configuration
 memory_threshold=80
 memory_warning_threshold=70
 EOF
-        ;;
-      disk)
-        cat >"$BASE_DIR/config/plugins/${plugin}.conf" <<EOF
+          ;;
+        disk)
+          cat > "$BASE_DIR/config/plugins/${plugin}.conf" << EOF
 # Disk Plugin Configuration
 disk_threshold=85
 disk_warning_threshold=75
 disk_monitored_paths=/
 EOF
-        ;;
-      process)
-        cat >"$BASE_DIR/config/plugins/${plugin}.conf" <<EOF
+          ;;
+        process)
+          cat > "$BASE_DIR/config/plugins/${plugin}.conf" << EOF
 # Process Plugin Configuration
 process_names=
 process_check_interval=60
 EOF
-        ;;
+          ;;
       esac
       print_success "Created $plugin plugin configuration"
     fi
@@ -296,19 +299,20 @@ setup_cron() {
   temp_crontab=$(mktemp)
 
   # Get existing crontab
-  crontab -l 2>/dev/null >"$temp_crontab" || echo "" >"$temp_crontab"
+  crontab -l 2> /dev/null > "$temp_crontab" || echo "" > "$temp_crontab"
 
   # Check if our cron job already exists
   if grep -q "serversentry" "$temp_crontab"; then
     print_warning "ServerSentry cron job already exists"
   else
     # Add our cron job
-    echo "# ServerSentry periodic check (every 5 minutes)" >>"$temp_crontab"
-    echo "*/5 * * * * $BASE_DIR/bin/serversentry check >/dev/null 2>&1" >>"$temp_crontab"
+# shellcheck disable=SC2129
+    echo "# ServerSentry periodic check (every 5 minutes)" >> "$temp_crontab"
+    echo "*/5 * * * * $BASE_DIR/bin/serversentry check >/dev/null 2>&1" >> "$temp_crontab"
 
     # Add periodic system report job (daily at midnight)
-    echo "# ServerSentry daily system report" >>"$temp_crontab"
-    echo "0 0 * * * $BASE_DIR/bin/serversentry status > $BASE_DIR/logs/daily_report.log 2>&1" >>"$temp_crontab"
+    echo "# ServerSentry daily system report" >> "$temp_crontab"
+    echo "0 0 * * * $BASE_DIR/bin/serversentry status > $BASE_DIR/logs/daily_report.log 2>&1" >> "$temp_crontab"
 
     # Install the new crontab
     crontab "$temp_crontab"
@@ -327,17 +331,17 @@ create_symlink() {
 
   # Use OS-specific binary paths
   case "$(compat_get_os)" in
-  macos)
-    # Try Homebrew paths first on macOS
-    if [[ -d "/opt/homebrew/bin" ]]; then
-      bin_dir="/opt/homebrew/bin"
-    elif [[ -d "/usr/local/bin" ]]; then
+    macos)
+      # Try Homebrew paths first on macOS
+      if [[ -d "/opt/homebrew/bin" ]]; then
+        bin_dir="/opt/homebrew/bin"
+      elif [[ -d "/usr/local/bin" ]]; then
+        bin_dir="/usr/local/bin"
+      fi
+      ;;
+    linux)
       bin_dir="/usr/local/bin"
-    fi
-    ;;
-  linux)
-    bin_dir="/usr/local/bin"
-    ;;
+      ;;
   esac
 
   # Check if we have permission to create the symlink
@@ -362,19 +366,19 @@ configure_webhooks() {
   echo "4) Email"
   echo "5) None/Skip"
 
-  read -p "Enter your choices (e.g., 1 2 3): " -a choices
+  read -r -p "Enter your choices (e.g., 1 2 3): " -a choices
 
   local notification_channels=""
 
   for choice in "${choices[@]}"; do
     case "$choice" in
-    1)
-      echo ""
-      echo "Microsoft Teams Configuration:"
-      read -p "Enter Teams webhook URL: " teams_webhook_url
+      1)
+        echo ""
+        echo "Microsoft Teams Configuration:"
+        read -r -p "Enter Teams webhook URL: " teams_webhook_url
 
-      # Create the Teams configuration file
-      cat >"$BASE_DIR/config/notifications/teams.conf" <<EOF
+        # Create the Teams configuration file
+        cat > "$BASE_DIR/config/notifications/teams.conf" << EOF
 # Teams Notification Provider Configuration
 teams_webhook_url="$teams_webhook_url"
 teams_notification_title="ServerSentry Alert"
@@ -382,22 +386,22 @@ teams_enabled=true
 teams_min_level=1
 EOF
 
-      if [ -n "$notification_channels" ]; then
-        notification_channels="${notification_channels},teams"
-      else
-        notification_channels="teams"
-      fi
+        if [ -n "$notification_channels" ]; then
+          notification_channels="${notification_channels},teams"
+        else
+          notification_channels="teams"
+        fi
 
-      print_success "Teams webhook configured"
-      ;;
+        print_success "Teams webhook configured"
+        ;;
 
-    2)
-      echo ""
-      echo "Slack Configuration:"
-      read -p "Enter Slack webhook URL: " slack_webhook_url
+      2)
+        echo ""
+        echo "Slack Configuration:"
+        read -r -p "Enter Slack webhook URL: " slack_webhook_url
 
-      # Create the Slack configuration file
-      cat >"$BASE_DIR/config/notifications/slack.conf" <<EOF
+        # Create the Slack configuration file
+        cat > "$BASE_DIR/config/notifications/slack.conf" << EOF
 # Slack Notification Provider Configuration
 slack_webhook_url="$slack_webhook_url"
 slack_notification_title="ServerSentry Alert"
@@ -407,22 +411,22 @@ slack_enabled=true
 slack_min_level=1
 EOF
 
-      if [ -n "$notification_channels" ]; then
-        notification_channels="${notification_channels},slack"
-      else
-        notification_channels="slack"
-      fi
+        if [ -n "$notification_channels" ]; then
+          notification_channels="${notification_channels},slack"
+        else
+          notification_channels="slack"
+        fi
 
-      print_success "Slack webhook configured"
-      ;;
+        print_success "Slack webhook configured"
+        ;;
 
-    3)
-      echo ""
-      echo "Discord Configuration:"
-      read -p "Enter Discord webhook URL: " discord_webhook_url
+      3)
+        echo ""
+        echo "Discord Configuration:"
+        read -r -p "Enter Discord webhook URL: " discord_webhook_url
 
-      # Create the Discord configuration file
-      cat >"$BASE_DIR/config/notifications/discord.conf" <<EOF
+        # Create the Discord configuration file
+        cat > "$BASE_DIR/config/notifications/discord.conf" << EOF
 # Discord Notification Provider Configuration
 discord_webhook_url="$discord_webhook_url"
 discord_notification_title="ServerSentry Alert"
@@ -431,69 +435,69 @@ discord_enabled=true
 discord_min_level=1
 EOF
 
-      if [ -n "$notification_channels" ]; then
-        notification_channels="${notification_channels},discord"
-      else
-        notification_channels="discord"
-      fi
-
-      print_success "Discord webhook configured"
-      ;;
-
-    4)
-      echo ""
-      echo "Email Configuration:"
-      read -p "Enter email recipient(s) (comma-separated): " email_recipients
-      read -p "Enter sender email (default: serversentry@hostname): " email_sender
-
-      if [ -z "$email_sender" ]; then
-        email_sender="serversentry@$(compat_get_hostname)"
-      fi
-
-      echo "Select email send method:"
-      echo "1) mail (system mail command)"
-      echo "2) sendmail (sendmail command)"
-      echo "3) smtp (direct SMTP)"
-
-      read -p "Enter your choice (1-3): " email_method_choice
-
-      local email_send_method="mail"
-      local smtp_config=""
-
-      case "$email_method_choice" in
-      1) email_send_method="mail" ;;
-      2) email_send_method="sendmail" ;;
-      3)
-        email_send_method="smtp"
-        read -p "SMTP Server: " smtp_server
-        read -p "SMTP Port (default: 25): " smtp_port
-        smtp_port=${smtp_port:-25}
-        read -p "SMTP Username (optional): " smtp_user
-
-        if [ -n "$smtp_user" ]; then
-          read -p "SMTP Password: " -s smtp_password
-          echo ""
-        fi
-
-        read -p "Use TLS? (y/n): " -n 1 use_tls
-        echo ""
-
-        if [[ $use_tls =~ ^[Yy]$ ]]; then
-          use_tls="true"
+        if [ -n "$notification_channels" ]; then
+          notification_channels="${notification_channels},discord"
         else
-          use_tls="false"
+          notification_channels="discord"
         fi
 
-        smtp_config="email_smtp_server=\"$smtp_server\"
+        print_success "Discord webhook configured"
+        ;;
+
+      4)
+        echo ""
+        echo "Email Configuration:"
+        read -r -p "Enter email recipient(s) (comma-separated): " email_recipients
+        read -r -p "Enter sender email (default: serversentry@hostname): " email_sender
+
+        if [ -z "$email_sender" ]; then
+          email_sender="serversentry@$(compat_get_hostname)"
+        fi
+
+        echo "Select email send method:"
+        echo "1) mail (system mail command)"
+        echo "2) sendmail (sendmail command)"
+        echo "3) smtp (direct SMTP)"
+
+        read -r -p "Enter your choice (1-3): " email_method_choice
+
+        local email_send_method="mail"
+        local smtp_config=""
+
+        case "$email_method_choice" in
+          1) email_send_method="mail" ;;
+          2) email_send_method="sendmail" ;;
+          3)
+            email_send_method="smtp"
+            read -r -p "SMTP Server: " smtp_server
+            read -r -p "SMTP Port (default: 25): " smtp_port
+            smtp_port=${smtp_port:-25}
+            read -r -p "SMTP Username (optional): " smtp_user
+
+            if [ -n "$smtp_user" ]; then
+              read -r -p "SMTP Password: " -s smtp_password
+              echo ""
+            fi
+
+            read -r -p "Use TLS? (y/n): " -n 1 use_tls
+            echo ""
+
+            if [[ $use_tls =~ ^[Yy]$ ]]; then
+              use_tls="true"
+            else
+              use_tls="false"
+            fi
+
+            smtp_config="email_smtp_server=\"$smtp_server\"
 email_smtp_port=\"$smtp_port\"
 email_smtp_user=\"$smtp_user\"
 email_smtp_password=\"$smtp_password\"
 email_smtp_use_tls=\"$use_tls\""
-        ;;
-      esac
+            ;;
+        esac
 
-      # Update the Email configuration file
-      cat >"$BASE_DIR/config/notifications/email.conf" <<EOF
+        # Update the Email configuration file
+        cat > "$BASE_DIR/config/notifications/email.conf" << EOF
 # Email Notification Provider Configuration
 email_recipients="$email_recipients"
 email_sender="$email_sender"
@@ -507,22 +511,22 @@ email_enabled=true
 email_min_level=1
 EOF
 
-      if [ -n "$notification_channels" ]; then
-        notification_channels="${notification_channels},email"
-      else
-        notification_channels="email"
-      fi
+        if [ -n "$notification_channels" ]; then
+          notification_channels="${notification_channels},email"
+        else
+          notification_channels="email"
+        fi
 
-      print_success "Email notification configured"
-      ;;
+        print_success "Email notification configured"
+        ;;
 
-    5)
-      print_info "Skipping webhook configuration"
-      ;;
+      5)
+        print_info "Skipping webhook configuration"
+        ;;
 
-    *)
-      print_warning "Invalid choice: $choice"
-      ;;
+      *)
+        print_warning "Invalid choice: $choice"
+        ;;
     esac
   done
 
@@ -537,11 +541,11 @@ EOF
 configure_process_monitoring() {
   print_info "Configuring process monitoring..."
 
-  read -p "Would you like to monitor specific processes? (y/n): " -n 1 monitor_processes
+  read -r -p "Would you like to monitor specific processes? (y/n): " -n 1 monitor_processes
   echo ""
 
   if [[ $monitor_processes =~ ^[Yy]$ ]]; then
-    read -p "Enter process names to monitor (comma-separated): " process_names
+    read -r -p "Enter process names to monitor (comma-separated): " process_names
 
     # Update the process plugin configuration
     compat_sed_inplace "s/process_names=.*/process_names=$process_names/" "$BASE_DIR/config/plugins/process.conf"
@@ -581,48 +585,48 @@ main() {
   # Process command line arguments
   if [ $# -gt 0 ]; then
     case "$1" in
-    --check-deps)
-      check_dependencies
-      exit 0
-      ;;
-    --setup-dirs)
-      setup_directories
-      exit 0
-      ;;
-    --setup-config)
-      setup_configuration
-      exit 0
-      ;;
-    --setup-cron)
-      setup_cron
-      exit 0
-      ;;
-    --setup-webhooks)
-      configure_webhooks
-      exit 0
-      ;;
-    --setup-process)
-      configure_process_monitoring
-      exit 0
-      ;;
-    --help | -h)
-      echo "Usage: $0 [OPTIONS]"
-      echo ""
-      echo "Options:"
-      echo "  --check-deps    Check for dependencies"
-      echo "  --setup-dirs    Set up directories and permissions"
-      echo "  --setup-config  Set up configuration files"
-      echo "  --setup-cron    Set up cron jobs"
-      echo "  --setup-webhooks Configure webhook notifications"
-      echo "  --setup-process Configure process monitoring"
-      echo "  --help, -h      Show this help message"
-      exit 0
-      ;;
-    *)
-      print_error "Unknown option: $1"
-      print_info "Use --help for usage information"
-      exit 1
-      ;;
+      --check-deps)
+        check_dependencies
+        exit 0
+        ;;
+      --setup-dirs)
+        setup_directories
+        exit 0
+        ;;
+      --setup-config)
+        setup_configuration
+        exit 0
+        ;;
+      --setup-cron)
+        setup_cron
+        exit 0
+        ;;
+      --setup-webhooks)
+        configure_webhooks
+        exit 0
+        ;;
+      --setup-process)
+        configure_process_monitoring
+        exit 0
+        ;;
+      --help | -h)
+        echo "Usage: $0 [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --check-deps    Check for dependencies"
+        echo "  --setup-dirs    Set up directories and permissions"
+        echo "  --setup-config  Set up configuration files"
+        echo "  --setup-cron    Set up cron jobs"
+        echo "  --setup-webhooks Configure webhook notifications"
+        echo "  --setup-process Configure process monitoring"
+        echo "  --help, -h      Show this help message"
+        exit 0
+        ;;
+      *)
+        print_error "Unknown option: $1"
+        print_info "Use --help for usage information"
+        exit 1
+        ;;
     esac
   fi
 
@@ -634,7 +638,7 @@ main() {
   setup_configuration
 
   # Ask if user wants to set up webhooks
-  read -p "Would you like to configure webhook notifications? (y/n): " -n 1 setup_webhooks
+  read -r -p "Would you like to configure webhook notifications? (y/n): " -n 1 setup_webhooks
   echo ""
 
   if [[ $setup_webhooks =~ ^[Yy]$ ]]; then
@@ -644,7 +648,7 @@ main() {
   fi
 
   # Ask if user wants to configure process monitoring
-  read -p "Would you like to configure process monitoring? (y/n): " -n 1 setup_process
+  read -r -p "Would you like to configure process monitoring? (y/n): " -n 1 setup_process
   echo ""
 
   if [[ $setup_process =~ ^[Yy]$ ]]; then
@@ -654,7 +658,7 @@ main() {
   fi
 
   # Ask if user wants to set up cron jobs
-  read -p "Would you like to set up cron jobs for automated monitoring? (y/n): " -n 1 setup_cron_jobs
+  read -r -p "Would you like to set up cron jobs for automated monitoring? (y/n): " -n 1 setup_cron_jobs
   echo ""
 
   if [[ $setup_cron_jobs =~ ^[Yy]$ ]]; then
@@ -664,7 +668,7 @@ main() {
   fi
 
   # Ask if user wants to create a symbolic link
-  read -p "Would you like to create a symbolic link in /usr/local/bin? (y/n): " -n 1 create_link
+  read -r -p "Would you like to create a symbolic link in /usr/local/bin? (y/n): " -n 1 create_link
   echo ""
 
   if [[ $create_link =~ ^[Yy]$ ]]; then
@@ -677,7 +681,9 @@ main() {
   print_info "Testing the installation..."
   "$BASE_DIR/bin/serversentry" version
 
+# shellcheck disable=SC2181
   if [ $? -eq 0 ]; then
+    # Consider: if command; then (direct exit code check)
     print_success "Installation test successful!"
   else
     print_error "Installation test failed. Please check the logs."

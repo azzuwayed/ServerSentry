@@ -1,0 +1,43 @@
+{
+    "recommendations": [
+        // Essential for Bash Development
+        "timonwong.shellcheck", // ShellCheck integration
+        "foxundermoon.shell-format", // Shell formatting with shfmt
+        "bmalehorn.shell-syntax", // Enhanced shell syntax highlighting
+        "rogalmic.bash-debug", // Bash debugging support
+        // Git Integration
+        "eamodio.gitlens", // Enhanced Git capabilities
+        "donjayamanne.githistory", // Git history visualization
+        // General Development
+        "ms-vscode.vscode-json", // JSON language support
+        "redhat.vscode-yaml", // YAML language support
+        "streetsidesoftware.code-spell-checker", // Spell checking for comments/docs
+        // Documentation
+        "yzhang.markdown-all-in-one", // Markdown support for README files
+        "bierner.markdown-preview-github-styling", // GitHub-style markdown preview
+        // Terminal Enhancement
+        "ms-vscode.vscode-terminal-tasks", // Terminal task integration
+        // Code Quality
+        "davidanson.vscode-markdownlint", // Markdown linting
+        "editorconfig.editorconfig", // EditorConfig support
+        // Productivity
+        "ms-vscode.vscode-todo-highlight", // TODO/FIXME highlighting
+        "gruntfuggly.todo-tree", // TODO tree view
+        "oderwat.indent-rainbow", // Rainbow indentation
+        "bradlc.vscode-tailwindcss", // If you use any web components
+        // Project Management
+        "alefragnani.project-manager", // Project management
+        "ms-vscode.vscode-folder-source", // Folder source control
+        // Optional but Useful
+        "ms-vscode.hexeditor", // Hex editor for binary files
+        "ms-vscode.vscode-typescript-next", // If you have any JS/TS in project
+        "formulahendry.code-runner", // Quick code execution
+        "chrisdias.vscode-opennewinstance" // Open new VS Code instances
+    ],
+    "unwantedRecommendations": [
+        // Extensions that might conflict with our bash setup
+        "ms-vscode.powershell", // PowerShell (Windows-specific)
+        "ms-vscode.vscode-typescript", // Older TypeScript extension
+        "hookyqr.beautify" // Generic beautifier (we use shfmt)
+    ]
+}
