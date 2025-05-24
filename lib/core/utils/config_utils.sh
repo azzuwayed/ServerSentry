@@ -66,65 +66,16 @@ util_config_get_cached() {
   local namespace="${2:-config}"
   local cache_duration="${3:-300}"
 
-  # If caching not supported, always parse directly
-  if [[ "$CACHE_SUPPORTED" != "true" ]]; then
-    util_config_parse_yaml "$config_file" "$namespace"
-    return $?
-  fi
-
-  local cache_key="${config_file##*/}_${namespace}"
-  # Sanitize cache key to be valid bash variable name
-  cache_key=$(echo "$cache_key" | tr '.-' '_')
-  local current_time
-  current_time=$(date +%s)
-
-  # Check if cached and still valid
-  if [[ -n "${CONFIG_CACHE[$cache_key]}" ]]; then
-    local file_time
-    file_time=$(stat -c %Y "$config_file" 2>/dev/null || stat -f %m "$config_file" 2>/dev/null || echo 0)
-    local cache_time="${CONFIG_TIMESTAMPS[$cache_key]:-0}"
-
-    # Check if file hasn't changed and cache isn't expired
-    if [[ "$file_time" -le "$cache_time" ]] && [[ $((current_time - cache_time)) -lt "$cache_duration" ]]; then
-      if declare -f log_debug >/dev/null 2>&1; then
-        log_debug "Using cached configuration: $cache_key"
-      fi
-      eval "${CONFIG_CACHE[$cache_key]}"
-      return 0
-    fi
-  fi
-
-  # Load and cache configuration
-  if declare -f log_debug >/dev/null 2>&1; then
-    log_debug "Loading and caching configuration: $config_file"
-  fi
-
-  # Capture variable assignments
-  local config_vars
-  config_vars=$(set | grep "^${namespace}_" || true)
-
-  if util_config_parse_yaml "$config_file" "$namespace"; then
-    # Capture new variable assignments
-    local new_config_vars
-    new_config_vars=$(set | grep "^${namespace}_" || true)
-
-    # Store in cache
-    CONFIG_CACHE[$cache_key]="$new_config_vars"
-    CONFIG_TIMESTAMPS[$cache_key]="$current_time"
-
-    if declare -f log_debug >/dev/null 2>&1; then
-      log_debug "Configuration cached: $cache_key"
-    fi
-    return 0
-  else
-    return 1
-  fi
+  # Temporarily disable caching to fix configuration loading
+  # TODO: Fix caching mechanism to work with dot notation conversion
+  util_config_parse_yaml "$config_file" "$namespace"
+  return $?
 }
 
 # Function: util_config_get_value
 # Description: Get a configuration value with optional default
 # Parameters:
-#   $1 - key name
+#   $1 - key name (supports dot notation)
 #   $2 - default value (optional)
 #   $3 - namespace (optional, defaults to config)
 # Returns:
@@ -134,7 +85,10 @@ util_config_get_value() {
   local default_value="${2:-}"
   local namespace="${3:-config}"
 
-  local var_name="${namespace}_${key}"
+  # Convert dot notation to underscore for bash variable names
+  local var_key
+  var_key=$(echo "$key" | tr '.' '_')
+  local var_name="${namespace}_${var_key}"
   local value="${!var_name:-}"
 
   if [[ -n "$value" ]]; then
@@ -147,7 +101,7 @@ util_config_get_value() {
 # Function: util_config_set_value
 # Description: Set a configuration value
 # Parameters:
-#   $1 - key name
+#   $1 - key name (supports dot notation)
 #   $2 - value
 #   $3 - namespace (optional, defaults to config)
 # Returns:
@@ -157,7 +111,10 @@ util_config_set_value() {
   local value="$2"
   local namespace="${3:-config}"
 
-  local var_name="${namespace}_${key}"
+  # Convert dot notation to underscore for bash variable names
+  local var_key
+  var_key=$(echo "$key" | tr '.' '_')
+  local var_name="${namespace}_${var_key}"
 
   # Sanitize the value
   value=$(util_sanitize_input "$value")
@@ -355,50 +312,79 @@ _config_parse_with_yq() {
 
   log_debug "Using yq for YAML parsing"
 
-  # Use yq to parse YAML into key-value pairs
-  while IFS=': ' read -r key value; do
-    # Skip empty lines and comments
-    [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+  # Use yq to parse YAML into flattened key-value pairs with dot notation
+  while IFS='=' read -r key value; do
+    # Skip empty lines
+    [[ -z "$key" ]] && continue
 
-    # Trim whitespace and quotes
-    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+    # Remove quotes from value
+    value=$(echo "$value" | sed 's/^"//;s/"$//')
 
-    # Store in configuration namespace
+    # Store in configuration namespace (util_config_set_value handles dot conversion)
     if [[ -n "$key" && -n "$value" ]]; then
-      log_debug "Setting config: ${namespace}_${key} = $value"
+      log_debug "Setting config: ${key} = $value"
       util_config_set_value "$key" "$value" "$namespace"
     fi
-  done < <(yq -r '. | to_entries | .[] | "\(.key): \(.value)"' "$config_file" 2>/dev/null)
+  done < <(yq eval -o=props "$config_file" 2>/dev/null | grep -v '^#' | grep '=')
 
   return $?
 }
 
-# Internal function: Basic YAML parser
+# Internal function: Basic YAML parser with nested structure support
 _config_parse_basic() {
   local config_file="$1"
   local namespace="$2"
 
-  log_debug "Using basic YAML parser"
+  log_debug "Using basic YAML parser with nested structure support"
+
+  local current_section=""
+  local indent_level=0
 
   while IFS= read -r line; do
     # Skip comments and empty lines
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
     [[ -z "$line" ]] && continue
 
-    # Parse key-value pairs
-    if [[ "$line" =~ ^[[:space:]]*([^:]+)[[:space:]]*:[[:space:]]*(.*)$ ]]; then
+    # Calculate indentation level
+    local line_indent=0
+    if [[ "$line" =~ ^([[:space:]]*) ]]; then
+      line_indent=${#BASH_REMATCH[1]}
+    fi
+
+    # Handle section headers (keys without values)
+    if [[ "$line" =~ ^[[:space:]]*([^:]+):[[:space:]]*$ ]]; then
+      local section_key="${BASH_REMATCH[1]}"
+      section_key=$(echo "$section_key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+      if [[ $line_indent -eq 0 ]]; then
+        current_section="$section_key"
+      elif [[ $line_indent -gt 0 ]]; then
+        current_section="${current_section}.${section_key}"
+      fi
+      continue
+    fi
+
+    # Handle key-value pairs
+    if [[ "$line" =~ ^[[:space:]]*([^:]+)[[:space:]]*:[[:space:]]*(.+)$ ]]; then
       local key="${BASH_REMATCH[1]}"
       local value="${BASH_REMATCH[2]}"
 
-      # Trim whitespace and brackets
+      # Trim whitespace and brackets/quotes
       key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^\[//;s/\]$//')
+      value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^\[//;s/\]$//;s/^"//;s/"$//')
 
-      # Store in configuration namespace
-      if [[ -n "$key" && -n "$value" ]]; then
-        log_debug "Setting config: ${namespace}_${key} = $value"
-        util_config_set_value "$key" "$value" "$namespace"
+      # Build full key path
+      local full_key
+      if [[ -n "$current_section" && $line_indent -gt 0 ]]; then
+        full_key="${current_section}.${key}"
+      else
+        full_key="$key"
+      fi
+
+      # Store in configuration namespace (util_config_set_value handles dot conversion)
+      if [[ -n "$full_key" && -n "$value" ]]; then
+        log_debug "Setting config: ${full_key} = $value"
+        util_config_set_value "$full_key" "$value" "$namespace"
       fi
     fi
   done <"$config_file"

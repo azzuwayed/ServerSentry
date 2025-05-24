@@ -880,10 +880,10 @@ diagnostics_check_required_fields() {
 
   # Define required fields for ServerSentry
   local required_fields=(
-    "enabled"
-    "log_level"
-    "check_interval"
-    "plugins_enabled"
+    "system.enabled"
+    "system.log_level"
+    "system.check_interval"
+    "plugins.enabled"
   )
 
   # Check each required field
@@ -1483,12 +1483,13 @@ cleanup_diagnostic_reports() {
   log_debug "Diagnostic report cleanup completed"
 }
 
-# Export functions for use by other modules
-if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
+# Export standardized functions
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f diagnostics_system_init
   export -f diagnostics_create_default_config
   export -f diagnostics_load_config
   export -f diagnostics_run_full
+  export -f diagnostics_run_quick
   export -f diagnostics_check_system_health
   export -f diagnostics_check_disk_space
   export -f diagnostics_check_memory_usage
@@ -1506,29 +1507,6 @@ if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
   export -f diagnostics_check_plugin_availability
   export -f diagnostics_get_summary
   export -f diagnostics_cleanup_reports
-
-  # Export backward compatibility functions
-  export -f init_diagnostics_system
-  export -f create_default_diagnostics_config
-  export -f parse_diagnostics_config
-  export -f run_full_diagnostics
-  export -f check_system_health_diagnostics
-  export -f check_disk_space_diagnostic
-  export -f check_memory_usage_diagnostic
-  export -f check_load_average_diagnostic
-  export -f check_configuration_diagnostics
-  export -f check_yaml_syntax_diagnostic
-  export -f check_required_fields_diagnostic
-  export -f check_file_permissions_diagnostic
-  export -f check_dependencies_diagnostics
-  export -f check_required_commands_diagnostic
-  export -f check_optional_commands_diagnostic
-  export -f check_performance_diagnostics
-  export -f check_plugin_performance_diagnostic
-  export -f check_plugins_diagnostics
-  export -f check_plugin_availability_diagnostic
-  export -f get_diagnostic_summary
-  export -f cleanup_diagnostic_reports
 fi
 
 # Helper function to safely format JSON arrays
@@ -1649,147 +1627,3 @@ _diagnostics_format_json_array() {
   json_array+="]"
   echo "$json_array"
 }
-
-# =============================================================================
-# BACKWARD COMPATIBILITY SECTION
-# =============================================================================
-# The following functions provide backward compatibility with the old naming
-# convention. They are deprecated and will be removed in a future version.
-
-# Deprecated: Use diagnostics_system_init instead
-init_diagnostics_system() {
-  log_warning "Function 'init_diagnostics_system' is deprecated. Use 'diagnostics_system_init' instead."
-  diagnostics_system_init "$@"
-}
-
-# Deprecated: Use diagnostics_create_default_config instead
-create_default_diagnostics_config() {
-  log_warning "Function 'create_default_diagnostics_config' is deprecated. Use 'diagnostics_create_default_config' instead."
-  diagnostics_create_default_config "$@"
-}
-
-# Deprecated: Use diagnostics_load_config instead
-parse_diagnostics_config() {
-  log_warning "Function 'parse_diagnostics_config' is deprecated. Use 'diagnostics_load_config' instead."
-  diagnostics_load_config "$@"
-}
-
-# Deprecated: Use diagnostics_run_full instead
-run_full_diagnostics() {
-  log_warning "Function 'run_full_diagnostics' is deprecated. Use 'diagnostics_run_full' instead."
-  diagnostics_run_full "$@"
-}
-
-# Deprecated: Use diagnostics_check_system_health instead
-check_system_health_diagnostics() {
-  log_warning "Function 'check_system_health_diagnostics' is deprecated. Use 'diagnostics_check_system_health' instead."
-  diagnostics_check_system_health "$@"
-}
-
-# Deprecated: Use diagnostics_check_disk_space instead
-check_disk_space_diagnostic() {
-  log_warning "Function 'check_disk_space_diagnostic' is deprecated. Use 'diagnostics_check_disk_space' instead."
-  diagnostics_check_disk_space "$@"
-}
-
-# Deprecated: Use diagnostics_check_memory_usage instead
-check_memory_usage_diagnostic() {
-  log_warning "Function 'check_memory_usage_diagnostic' is deprecated. Use 'diagnostics_check_memory_usage' instead."
-  diagnostics_check_memory_usage "$@"
-}
-
-# Deprecated: Use diagnostics_check_load_average instead
-check_load_average_diagnostic() {
-  log_warning "Function 'check_load_average_diagnostic' is deprecated. Use 'diagnostics_check_load_average' instead."
-  diagnostics_check_load_average "$@"
-}
-
-# Deprecated: Use diagnostics_check_configuration instead
-check_configuration_diagnostics() {
-  log_warning "Function 'check_configuration_diagnostics' is deprecated. Use 'diagnostics_check_configuration' instead."
-  diagnostics_check_configuration "$@"
-}
-
-# Deprecated: Use diagnostics_check_yaml_syntax instead
-check_yaml_syntax_diagnostic() {
-  log_warning "Function 'check_yaml_syntax_diagnostic' is deprecated. Use 'diagnostics_check_yaml_syntax' instead."
-  diagnostics_check_yaml_syntax "$@"
-}
-
-# Deprecated: Use diagnostics_check_required_fields instead
-check_required_fields_diagnostic() {
-  log_warning "Function 'check_required_fields_diagnostic' is deprecated. Use 'diagnostics_check_required_fields' instead."
-  diagnostics_check_required_fields "$@"
-}
-
-# Deprecated: Use diagnostics_check_file_permissions instead
-check_file_permissions_diagnostic() {
-  log_warning "Function 'check_file_permissions_diagnostic' is deprecated. Use 'diagnostics_check_file_permissions' instead."
-  diagnostics_check_file_permissions "$@"
-}
-
-# Deprecated: Use diagnostics_check_dependencies instead
-check_dependencies_diagnostics() {
-  log_warning "Function 'check_dependencies_diagnostics' is deprecated. Use 'diagnostics_check_dependencies' instead."
-  diagnostics_check_dependencies "$@"
-}
-
-# Deprecated: Use diagnostics_check_required_commands instead
-check_required_commands_diagnostic() {
-  log_warning "Function 'check_required_commands_diagnostic' is deprecated. Use 'diagnostics_check_required_commands' instead."
-  diagnostics_check_required_commands "$@"
-}
-
-# Deprecated: Use diagnostics_check_optional_commands instead
-check_optional_commands_diagnostic() {
-  log_warning "Function 'check_optional_commands_diagnostic' is deprecated. Use 'diagnostics_check_optional_commands' instead."
-  diagnostics_check_optional_commands "$@"
-}
-
-# Deprecated: Use diagnostics_check_performance instead
-check_performance_diagnostics() {
-  log_warning "Function 'check_performance_diagnostics' is deprecated. Use 'diagnostics_check_performance' instead."
-  diagnostics_check_performance "$@"
-}
-
-# Deprecated: Use diagnostics_check_plugin_performance instead
-check_plugin_performance_diagnostic() {
-  log_warning "Function 'check_plugin_performance_diagnostic' is deprecated. Use 'diagnostics_check_plugin_performance' instead."
-  diagnostics_check_plugin_performance "$@"
-}
-
-# Deprecated: Use diagnostics_check_plugins instead
-check_plugins_diagnostics() {
-  log_warning "Function 'check_plugins_diagnostics' is deprecated. Use 'diagnostics_check_plugins' instead."
-  diagnostics_check_plugins "$@"
-}
-
-# Deprecated: Use diagnostics_check_plugin_availability instead
-check_plugin_availability_diagnostic() {
-  log_warning "Function 'check_plugin_availability_diagnostic' is deprecated. Use 'diagnostics_check_plugin_availability' instead."
-  diagnostics_check_plugin_availability "$@"
-}
-
-# Deprecated: Use diagnostics_get_summary instead
-get_diagnostic_summary() {
-  log_warning "Function 'get_diagnostic_summary' is deprecated. Use 'diagnostics_get_summary' instead."
-  diagnostics_get_summary "$@"
-}
-
-# Deprecated: Use diagnostics_cleanup_reports instead
-cleanup_diagnostic_reports() {
-  log_warning "Function 'cleanup_diagnostic_reports' is deprecated. Use 'diagnostics_cleanup_reports' instead."
-  diagnostics_cleanup_reports "$@"
-}
-
-# Deprecated: Use _diagnostics_format_json_array instead
-format_json_array() {
-  log_warning "Function 'format_json_array' is deprecated. Use '_diagnostics_format_json_array' instead."
-  _diagnostics_format_json_array "$@"
-}
-
-# =============================================================================
-# END OF BACKWARD COMPATIBILITY SECTION
-# =============================================================================
-
-log_debug "Diagnostics module loaded successfully"

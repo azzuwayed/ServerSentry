@@ -349,21 +349,7 @@ logging_check_size() {
   fi
 }
 
-# === BACKWARD COMPATIBILITY FUNCTIONS ===
-
-# Backward compatibility: init_logging
-init_logging() {
-  log_warning "Function init_logging() is deprecated, use logging_init() instead"
-  logging_init "$@"
-}
-
-# Backward compatibility: rotate_logs
-rotate_logs() {
-  log_warning "Function rotate_logs() is deprecated, use logging_rotate() instead"
-  logging_rotate "$@"
-}
-
-# Export new standardized functions
+# Export standardized functions
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f logging_init
   export -f logging_set_level
@@ -377,10 +363,6 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f log_critical
   export -f log_with_context
   export -f logging_check_size
-
-  # Export backward compatibility functions
-  export -f init_logging
-  export -f rotate_logs
 fi
 
 # Initialize logging on module load

@@ -375,9 +375,7 @@ serversentry diagnostics run | grep -A 10 "Performance"
 
 ## Related Documentation
 
-- [Configuration Guide](README.md#configuration)
-- [Plugin System](README.md#monitoring-plugins)
-- [Notification System](README.md#notification-system)
-- [Anomaly Detection](README.md#anomaly-detection)
-- [TUI Dashboard](README.md#tui-dashboard)
-- [Troubleshooting](README.md#troubleshooting)
+- [Configuration Guide](configuration.md) - Complete configuration reference
+- [User Manual](README.md) - Comprehensive user guide covering plugins and features
+- [CLI Reference](cli-reference.md) - Complete command-line interface documentation
+- [Troubleshooting Guide](troubleshooting.md) - Problem resolution guide

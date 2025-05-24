@@ -11,8 +11,7 @@ NOTIFICATION_CONFIG_DIR="${BASE_DIR}/config/notifications"
 # Array to store registered notification providers
 declare -a registered_providers
 
-# New standardized function: notification_system_init
-# Description: Initialize notification system with enhanced error handling
+# Initialize notification system with enhanced error handling
 # Returns:
 #   0 - success
 #   1 - failure
@@ -68,12 +67,6 @@ notification_system_init() {
   log_info "Loaded ${#registered_providers[@]} notification providers"
 
   return 0
-}
-
-# Backward compatibility: init_notification_system
-init_notification_system() {
-  log_warning "Function init_notification_system() is deprecated, use notification_system_init() instead"
-  notification_system_init "$@"
 }
 
 # Load a notification provider
@@ -189,7 +182,4 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f validate_notification_provider
   export -f register_notification_provider
   export -f send_notification
-
-  # Export backward compatibility functions
-  export -f init_notification_system
 fi

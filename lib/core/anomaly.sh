@@ -16,7 +16,7 @@ ANOMALY_SENSITIVITY=2.0    # Standard deviation multiplier for outliers
 ANOMALY_MIN_DATA_POINTS=10 # Minimum data points before analysis
 
 # Initialize anomaly detection system
-init_anomaly_system() {
+anomaly_system_init() {
   log_debug "Initializing anomaly detection system"
 
   # Create directories if they don't exist
@@ -28,13 +28,13 @@ init_anomaly_system() {
   done
 
   # Create default anomaly detection configurations
-  create_default_anomaly_configs
+  anomaly_create_default_config
 
   return 0
 }
 
 # Create default anomaly detection configurations
-create_default_anomaly_configs() {
+anomaly_create_default_config() {
   # CPU anomaly detection config
   local cpu_anomaly_config="$ANOMALY_CONFIG_DIR/cpu_anomaly.conf"
   if [ ! -f "$cpu_anomaly_config" ]; then
@@ -184,7 +184,7 @@ detect_statistical_anomaly() {
   local config_file="$4"
 
   # Load configuration
-  if ! parse_anomaly_config "$config_file"; then
+  if ! anomaly_parse_config "$config_file"; then
     return 1
   fi
 
@@ -635,84 +635,19 @@ anomaly_send_notification() {
   return 0
 }
 
-# === BACKWARD COMPATIBILITY FUNCTIONS ===
-
-# Backward compatibility: parse_anomaly_config
-parse_anomaly_config() {
-  log_warning "Function parse_anomaly_config() is deprecated, use anomaly_parse_config() instead"
-  local config_file="$1"
-
-  # Extract plugin name from filename for new function
-  local plugin_name
-  plugin_name=$(basename "$config_file" | sed 's/_anomaly.conf//')
-
-  anomaly_parse_config "$config_file" "$plugin_name"
-}
-
-# Backward compatibility: run_anomaly_detection
-run_anomaly_detection() {
-  log_warning "Function run_anomaly_detection() is deprecated, use anomaly_run_detection() instead"
-  anomaly_run_detection "$@"
-}
-
-# Backward compatibility: should_send_anomaly_notification
-should_send_anomaly_notification() {
-  log_warning "Function should_send_anomaly_notification() is deprecated, use anomaly_should_send_notification() instead"
-  anomaly_should_send_notification "$@"
-}
-
-# Backward compatibility: get_consecutive_anomaly_count
-get_consecutive_anomaly_count() {
-  log_warning "Function get_consecutive_anomaly_count() is deprecated, use anomaly_get_consecutive_count() instead"
-  anomaly_get_consecutive_count "$@"
-}
-
-# Backward compatibility: send_anomaly_notification
-send_anomaly_notification() {
-  log_warning "Function send_anomaly_notification() is deprecated, use anomaly_send_notification() instead"
-  anomaly_send_notification "$@"
-}
-
-# Get anomaly detection summary
-get_anomaly_summary() {
-  local days="${1:-7}"
-
-  echo "Anomaly Detection Summary (Last $days days):"
-  echo "============================================"
-
-  for config_file in "$ANOMALY_CONFIG_DIR"/*_anomaly.conf; do
-    if [ -f "$config_file" ]; then
-      local plugin_name
-      plugin_name=$(basename "$config_file" | sed 's/_anomaly.conf//')
-
-      echo "Plugin: $plugin_name"
-
-      # Count anomalies in the last N days
-      local anomaly_count=0
-      for ((i = 0; i < days; i++)); do
-        local check_date
-        check_date=$(date -d "$i days ago" +%Y%m%d 2>/dev/null || date -v-${i}d +%Y%m%d 2>/dev/null)
-        local result_file="$ANOMALY_RESULTS_DIR/${plugin_name}_${check_date}.log"
-
-        if [ -f "$result_file" ]; then
-          local daily_count
-          daily_count=$(grep -c '"is_anomaly": true' "$result_file" 2>/dev/null || echo "0")
-          anomaly_count=$((anomaly_count + daily_count))
-        fi
-      done
-
-      echo "  Anomalies detected: $anomaly_count"
-      echo "  Configuration: $(basename "$config_file")"
-      echo "---"
-    fi
-  done
-}
-
-# Export functions for use by other modules
-if [ "${BASH_SOURCE[0]}" != "${0}" ]; then
-  export -f init_anomaly_system
+# Export standardized functions
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  export -f anomaly_system_init
+  export -f anomaly_create_default_config
+  export -f anomaly_load_config
   export -f store_metric_data
   export -f detect_statistical_anomaly
-  export -f run_anomaly_detection
-  export -f get_anomaly_summary
+  export -f detect_trend_anomaly
+  export -f detect_spike_anomaly
+  export -f anomaly_parse_config
+  export -f anomaly_get_config_value
+  export -f anomaly_run_detection
+  export -f anomaly_should_send_notification
+  export -f anomaly_get_consecutive_count
+  export -f anomaly_send_notification
 fi

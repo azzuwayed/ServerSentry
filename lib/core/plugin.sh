@@ -27,7 +27,7 @@ else
   log_warning "Associative arrays not supported in bash version $BASH_VERSION, using fallback methods"
 fi
 
-# Array to store registered plugins (for backward compatibility)
+# Array to store registered plugins
 declare -a registered_plugins
 
 # Source utilities
@@ -177,7 +177,7 @@ plugin_system_init() {
 
   # Load enabled plugins from configuration
   local enabled_plugins
-  enabled_plugins=$(config_get_value "plugins_enabled" "cpu")
+  enabled_plugins=$(config_get_value "plugins.enabled" "cpu")
 
   # Convert comma/space/brackets separated string to array
   local plugin_list
@@ -359,7 +359,7 @@ plugin_register() {
     return 1
   fi
 
-  # Add to registered plugins array (for backward compatibility)
+  # Add to registered plugins array
   util_array_add_unique registered_plugins "$plugin_name"
 
   # Get and store plugin info
@@ -599,57 +599,6 @@ sanitize_and_validate_input() {
 
   echo "$sanitized"
   return 0
-}
-
-# === BACKWARD COMPATIBILITY FUNCTIONS ===
-# These maintain compatibility with existing code
-
-# Backward compatibility: init_plugin_system
-init_plugin_system() {
-  log_warning "Function init_plugin_system() is deprecated, use plugin_system_init() instead"
-  plugin_system_init "$@"
-}
-
-# Backward compatibility: load_plugin
-load_plugin() {
-  log_warning "Function load_plugin() is deprecated, use plugin_load() instead"
-  plugin_load "$@"
-}
-
-# Backward compatibility: validate_plugin
-validate_plugin() {
-  log_warning "Function validate_plugin() is deprecated, use plugin_validate_interface() instead"
-  plugin_validate_interface "$@"
-}
-
-# Backward compatibility: register_plugin
-register_plugin() {
-  log_warning "Function register_plugin() is deprecated, use plugin_register() instead"
-  plugin_register "$@"
-}
-
-# Backward compatibility: run_plugin_check
-run_plugin_check() {
-  log_warning "Function run_plugin_check() is deprecated, use plugin_run_check() instead"
-  plugin_run_check "$@"
-}
-
-# Backward compatibility: is_plugin_registered
-is_plugin_registered() {
-  log_warning "Function is_plugin_registered() is deprecated, use plugin_is_loaded() instead"
-  plugin_is_loaded "$@"
-}
-
-# Backward compatibility: list_plugins
-list_plugins() {
-  log_warning "Function list_plugins() is deprecated, use plugin_list_loaded() instead"
-  plugin_list_loaded "$@"
-}
-
-# Backward compatibility: run_all_plugin_checks
-run_all_plugin_checks() {
-  log_warning "Function run_all_plugin_checks() is deprecated, use plugin_run_all_checks() instead"
-  plugin_run_all_checks "$@"
 }
 
 # === ADVANCED PLUGIN OPTIMIZATION FUNCTIONS ===
@@ -915,7 +864,7 @@ plugin_cleanup_performance_logs() {
   return 0
 }
 
-# Export new standardized functions
+# Export standardized functions
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f plugin_system_init
   export -f plugin_load
@@ -925,14 +874,11 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f plugin_is_loaded
   export -f plugin_list_loaded
   export -f plugin_run_all_checks
+  export -f plugin_registry_save
+  export -f plugin_registry_load
+  export -f plugin_performance_track
+  export -f plugin_get_performance_stats
+  export -f plugin_optimize_loading
+  export -f plugin_cleanup_performance_logs
 
-  # Export backward compatibility functions
-  export -f init_plugin_system
-  export -f load_plugin
-  export -f validate_plugin
-  export -f register_plugin
-  export -f run_plugin_check
-  export -f is_plugin_registered
-  export -f list_plugins
-  export -f run_all_plugin_checks
 fi

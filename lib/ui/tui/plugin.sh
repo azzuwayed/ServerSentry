@@ -8,9 +8,9 @@ tui_plugin_management() {
   local config_file="$BASE_DIR/config/serversentry.yaml"
   local enabled_plugins
   if command -v yq >/dev/null 2>&1; then
-    enabled_plugins=$(yq e '.plugins_enabled | join(",")' "$config_file" 2>/dev/null)
+    enabled_plugins=$(yq e '.plugins.enabled | join(",")' "$config_file" 2>/dev/null)
   else
-    enabled_plugins=$(grep '^plugins_enabled:' "$config_file" | sed 's/^plugins_enabled:[[:space:]]*\[//;s/\][[:space:]]*$//;s/[[:space:]]//g')
+    enabled_plugins=$(grep '^[[:space:]]*enabled:' "$config_file" | grep -A1 'plugins:' | tail -1 | sed 's/^[[:space:]]*enabled:[[:space:]]*\[//;s/\][[:space:]]*$//;s/[[:space:]]//g')
   fi
   IFS=',' read -ra enabled_array <<<"$enabled_plugins"
 
@@ -115,12 +115,19 @@ tui_plugin_management() {
       new_enabled+=("$choice")
     fi
     # Write new enabled plugins list to config in YAML array format
-    local new_line="plugins_enabled: [$(
+    local new_line="  enabled: [$(
       IFS=,
       echo \""${new_enabled[*]}"\"
     )]"
-    if ! sed -i.bak "/^plugins_enabled:/c\\$new_line" "$config_file" 2>/dev/null; then
-      awk -v repl="$new_line" '/^plugins_enabled:/ {$0=repl} {print}' "$config_file" >"$config_file.new" && mv "$config_file.new" "$config_file"
+    # Update the plugins.enabled line specifically
+    if ! sed -i.bak "/^[[:space:]]*enabled:.*# Plugin Configuration/,/^[[:space:]]*enabled:/c\\$new_line" "$config_file" 2>/dev/null; then
+      # Fallback method for updating plugins.enabled
+      awk -v repl="$new_line" '
+        /^plugins:/ { in_plugins=1 }
+        in_plugins && /^[[:space:]]*enabled:/ { $0=repl; in_plugins=0 }
+        /^[^[:space:]]/ && !/^plugins:/ { in_plugins=0 }
+        {print}
+      ' "$config_file" >"$config_file.new" && mv "$config_file.new" "$config_file"
     fi
     # Validate YAML after change
     if command -v yq >/dev/null 2>&1; then

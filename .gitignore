@@ -23,11 +23,15 @@ Thumbs.db
 *.temp
 *.bak
 *.backup
+
+# Log directories - ignore all contents but keep directory structure
 logs/*.log
-logs/archive/*.log
-logs/anomaly/results/*.json
-logs/diagnostics/reports/*.json
-logs/periodic/*.log
+logs/*.json
+logs/archive/
+logs/anomaly/
+logs/diagnostics/
+logs/periodic/
+logs/composite/
 
 # Test outputs
 test_*.log

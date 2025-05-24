@@ -2,10 +2,11 @@
 #
 # ServerSentry v2 - Utilities Loader
 #
-# This module loads all utility functions and maintains backward compatibility
+# This module loads all utility functions and provides standardized operations
+# for ServerSentry v2 with no legacy compatibility
 
-# Get the utilities directory path
-UTILS_DIR="${BASE_DIR}/lib/core/utils"
+# Set BASE_DIR if not already set
+BASE_DIR="${BASE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 # Function: init_utilities
 # Description: Initialize all utility modules
@@ -21,54 +22,55 @@ init_utilities() {
   fi
 
   # Check if utilities directory exists
-  if [[ ! -d "$UTILS_DIR" ]]; then
+  if [[ ! -d "${BASE_DIR}/lib/core/utils" ]]; then
     if declare -f log_warning >/dev/null 2>&1; then
-      log_warning "Utilities directory not found: $UTILS_DIR"
+      log_warning "Utilities directory not found: ${BASE_DIR}/lib/core/utils"
     else
-      echo "[WARNING] Utilities directory not found: $UTILS_DIR"
+      echo "[WARNING] Utilities directory not found: ${BASE_DIR}/lib/core/utils"
     fi
     return 1
   fi
 
-  # Load all utility modules
+  # Initialize utilities by loading all utility modules
   local utility_modules=(
     "validation_utils.sh"
-    "json_utils.sh"
-    "array_utils.sh"
-    "config_utils.sh"
     "command_utils.sh"
+    "json_utils.sh"
+    "config_utils.sh"
+    "array_utils.sh"
     "performance_utils.sh"
   )
 
+  local failed_modules=()
+
   for module in "${utility_modules[@]}"; do
-    local module_path="$UTILS_DIR/$module"
+    local module_path="${BASE_DIR}/lib/core/utils/${module}"
     if [[ -f "$module_path" ]]; then
       if declare -f log_debug >/dev/null 2>&1; then
         log_debug "Loading utility module: $module"
       else
         echo "[DEBUG] Loading utility module: $module"
       fi
+      # shellcheck source=/dev/null
       source "$module_path" || {
-        if declare -f log_error >/dev/null 2>&1; then
-          log_error "Failed to load utility module: $module"
-        else
-          echo "[ERROR] Failed to load utility module: $module" >&2
-        fi
-        return 1
+        failed_modules+=("$module")
+        echo "[ERROR] Failed to load utility module: $module" >&2
       }
     else
-      if declare -f log_warning >/dev/null 2>&1; then
-        log_warning "Utility module not found: $module_path"
-      else
-        echo "[WARNING] Utility module not found: $module_path"
-      fi
+      failed_modules+=("$module (not found)")
+      echo "[WARNING] Utility module not found: $module" >&2
     fi
   done
 
-  if declare -f log_debug >/dev/null 2>&1; then
-    log_debug "All utility modules loaded successfully"
+  if [[ ${#failed_modules[@]} -gt 0 ]]; then
+    echo "[ERROR] Failed to load ${#failed_modules[@]} utility modules: ${failed_modules[*]}" >&2
+    return 1
   else
-    echo "[DEBUG] All utility modules loaded successfully"
+    if declare -f log_debug >/dev/null 2>&1; then
+      log_debug "All utility modules loaded successfully"
+    else
+      echo "[DEBUG] All utility modules loaded successfully"
+    fi
   fi
   return 0
 }
@@ -76,8 +78,8 @@ init_utilities() {
 # Initialize utilities when this module is sourced
 init_utilities
 
-# === BACKWARD COMPATIBILITY FUNCTIONS ===
-# These functions maintain compatibility with existing code
+# === ENHANCED UTILITY FUNCTIONS ===
+# These functions provide enhanced operations with modern patterns
 
 # Check if command exists
 command_exists() {
@@ -170,7 +172,7 @@ trim() {
   echo -n "$var"
 }
 
-# Validate IP address (now uses new validation utils)
+# Validate IP address (uses validation utils)
 is_valid_ip() {
   local ip="$1"
   util_validate_ip_address "$ip" "ip_address"
@@ -246,13 +248,13 @@ url_encode() {
   echo "$encoded"
 }
 
-# JSON escape (now uses new JSON utils)
+# JSON escape (uses JSON utils)
 json_escape() {
   local json="$1"
   util_json_escape "$json"
 }
 
-# === NEW UTILITY ALIASES FOR COMMON OPERATIONS ===
+# === MODERN UTILITY OPERATIONS ===
 
 # Create secure temporary file
 create_temp_file() {
@@ -347,7 +349,7 @@ measure_performance() {
   return "$exit_code"
 }
 
-# Export backward compatibility functions
+# Export modern utility functions
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f command_exists
   export -f is_root

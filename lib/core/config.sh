@@ -15,20 +15,19 @@ source "${BASE_DIR}/lib/core/utils.sh"
 
 # Configuration validation rules
 declare -a CONFIG_VALIDATION_RULES=(
-  "enabled:boolean:"
-  "log_level:log_level:"
-  "check_interval:positive_numeric:"
-  "plugins_enabled:required:"
-  "notification_enabled:boolean:"
-  "max_log_size:positive_numeric:"
-  "max_log_archives:positive_numeric:"
-  "check_timeout:positive_numeric:"
-  "teams_webhook_url:url:"
-  "email_to:email:"
+  "system.enabled:boolean:"
+  "system.log_level:log_level:"
+  "system.check_interval:positive_numeric:"
+  "plugins.enabled:required:"
+  "notifications.enabled:boolean:"
+  "system.max_log_size:positive_numeric:"
+  "system.max_log_archives:positive_numeric:"
+  "system.check_timeout:positive_numeric:"
+  "notifications.teams.webhook_url:url:"
+  "notifications.email.to:email:"
 )
 
-# New standardized function: config_init
-# Description: Initialize configuration system with proper validation and directory setup
+# Initialize configuration system with proper validation and directory setup
 # Returns:
 #   0 - success
 #   1 - failure
@@ -56,8 +55,7 @@ config_init() {
   return 0
 }
 
-# New standardized function: config_load
-# Description: Load and validate configuration with caching support
+# Load and validate configuration with caching support
 # Returns:
 #   0 - success
 #   1 - failure
@@ -88,8 +86,7 @@ config_load() {
   return 0
 }
 
-# New standardized function: config_get_value
-# Description: Get configuration value with optional default
+# Get configuration value with optional default
 # Parameters:
 #   $1 - key name
 #   $2 - default value (optional)
@@ -102,8 +99,7 @@ config_get_value() {
   util_config_get_value "$key" "$default_value" "$CONFIG_NAMESPACE"
 }
 
-# New standardized function: config_set_value
-# Description: Set configuration value with validation
+# Set configuration value with validation
 # Parameters:
 #   $1 - key name
 #   $2 - value
@@ -125,8 +121,7 @@ config_set_value() {
   util_config_set_value "$key" "$value" "$CONFIG_NAMESPACE"
 }
 
-# New standardized function: config_create_default
-# Description: Create default configuration file with secure permissions
+# Create default configuration file with secure permissions
 # Returns:
 #   0 - success
 #   1 - failure
@@ -135,33 +130,75 @@ config_create_default() {
   template_content=$(
     cat <<'EOF'
 # ServerSentry v2 Configuration
+# Main configuration file for the ServerSentry monitoring system
 
-# General settings
-enabled: true
-log_level: info
-check_interval: 60
+# Core System Settings
+system:
+  enabled: true
+  log_level: info
+  check_interval: 60
+  check_timeout: 30
+  max_log_size: 10485760  # 10MB
+  max_log_archives: 10
 
-# Plugin settings
-plugins_enabled: [cpu, memory, disk]
+# Plugin Configuration
+plugins:
+  enabled: [cpu, memory, disk]
+  directory: lib/plugins
+  config_directory: config/plugins
 
-# Notification settings
-notification_enabled: true
-notification_channels: []
+# Notification System
+notifications:
+  enabled: true
+  channels: []
+  cooldown_period: 300  # 5 minutes between notifications
+  
+  # Teams Integration
+  teams:
+    webhook_url: ""
+    notification_title: "ServerSentry Alert"
+    enabled: false
+  
+  # Email Configuration
+  email:
+    enabled: false
+    from: "serversentry@localhost"
+    to: ""
+    subject: "[ServerSentry] Alert: {status}"
+    smtp_server: "localhost"
+    smtp_port: 587
 
-# Teams notification settings
-teams_webhook_url: ""
-teams_notification_title: "ServerSentry Alert"
+# Anomaly Detection
+anomaly_detection:
+  enabled: true
+  default_sensitivity: 2.0
+  data_retention_days: 30
+  minimum_data_points: 10
 
-# Email notification settings
-email_enabled: false
-email_from: "serversentry@localhost"
-email_to: ""
-email_subject: "[ServerSentry] Alert: {status}"
+# Composite Checks
+composite_checks:
+  enabled: true
+  config_directory: config/composite
 
-# Advanced settings
-max_log_size: 10485760  # 10MB
-max_log_archives: 10
-check_timeout: 30
+# Performance Monitoring
+performance:
+  track_plugin_performance: true
+  track_system_performance: true
+  performance_log_retention_days: 7
+
+# Security Settings
+security:
+  file_permissions:
+    config_files: 644
+    log_files: 644
+    directories: 755
+
+# Advanced Features
+advanced:
+  enable_json_output: true
+  enable_webhook_notifications: true
+  enable_template_system: true
+  enable_diagnostics: true
 EOF
   )
 
@@ -173,8 +210,7 @@ EOF
   return 0
 }
 
-# New standardized function: config_validate
-# Description: Validate current configuration values
+# Validate current configuration values
 # Returns:
 #   0 - validation passed
 #   1 - validation failed
@@ -190,8 +226,7 @@ config_validate() {
   return 0
 }
 
-# New standardized function: config_reload
-# Description: Reload configuration from file
+# Reload configuration from file
 # Returns:
 #   0 - success
 #   1 - failure
@@ -207,59 +242,7 @@ config_reload() {
   config_load
 }
 
-# === BACKWARD COMPATIBILITY FUNCTIONS ===
-# These maintain compatibility with existing code
-
-# Backward compatibility: init_config
-init_config() {
-  log_warning "Function init_config() is deprecated, use config_init() instead"
-  config_init "$@"
-}
-
-# Backward compatibility: load_config
-load_config() {
-  log_warning "Function load_config() is deprecated, use config_load() instead"
-  config_load "$@"
-}
-
-# Backward compatibility: get_config
-get_config() {
-  log_warning "Function get_config() is deprecated, use config_get_value() instead"
-  config_get_value "$@"
-}
-
-# Backward compatibility: parse_config (now internal only)
-parse_config() {
-  log_warning "Function parse_config() is deprecated, use util_config_parse_yaml() instead"
-  local config_file="$1"
-  util_config_parse_yaml "$config_file" "$CONFIG_NAMESPACE"
-}
-
-# Backward compatibility: apply_defaults (now handled by utility)
-apply_defaults() {
-  log_warning "Function apply_defaults() is deprecated, defaults are applied automatically"
-  return 0
-}
-
-# Backward compatibility: validate_config
-validate_config() {
-  log_warning "Function validate_config() is deprecated, use config_validate() instead"
-  config_validate "$@"
-}
-
-# Backward compatibility: load_env_overrides (now handled by utility)
-load_env_overrides() {
-  log_warning "Function load_env_overrides() is deprecated, overrides are loaded automatically"
-  util_config_load_env_overrides "SERVERSENTRY" "$CONFIG_NAMESPACE"
-}
-
-# Backward compatibility: create_default_config
-create_default_config() {
-  log_warning "Function create_default_config() is deprecated, use config_create_default() instead"
-  config_create_default "$@"
-}
-
-# Export new standardized functions
+# Export functions
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f config_init
   export -f config_load
@@ -268,14 +251,4 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f config_create_default
   export -f config_validate
   export -f config_reload
-
-  # Export backward compatibility functions
-  export -f init_config
-  export -f load_config
-  export -f get_config
-  export -f parse_config
-  export -f apply_defaults
-  export -f validate_config
-  export -f load_env_overrides
-  export -f create_default_config
 fi
