@@ -14,7 +14,7 @@ A comprehensive, modular server monitoring system featuring statistical anomaly 
 
 ### 📊 **Professional Monitoring**
 
-- **Real-Time TUI Dashboard** - 7-screen interactive interface with live metrics
+- **Real-Time TUI Dashboard** - Interactive interface with live metrics
 - **Visual Progress Bars** - Color-coded resource usage with Unicode graphics
 - **Multi-Provider Notifications** - Teams, Slack, Discord, Email, Webhook support
 - **Template System** - Customizable notification content with variables
@@ -23,7 +23,7 @@ A comprehensive, modular server monitoring system featuring statistical anomaly 
 
 - **Plugin-Based Design** - Modular, extensible monitoring components
 - **Dynamic Configuration** - Hot-reload without service interruption
-- **Plugin Health Tracking** - Performance monitoring and versioning
+- **Plugin Health Tracking** - Performance monitoring and optimization
 - **Cross-Platform Support** - Linux, macOS, and Unix-like systems
 
 ### 📈 **Enterprise Features**
@@ -38,9 +38,11 @@ A comprehensive, modular server monitoring system featuring statistical anomaly 
 ### Installation
 
 ```bash
-# Clone and setup
+# Clone the repository
 git clone https://github.com/yourusername/ServerSentry.git
-cd ServerSentry/v2
+cd ServerSentry
+
+# Make the main executable available
 chmod +x bin/serversentry
 
 # Optional: Add to PATH
@@ -51,10 +53,7 @@ source ~/.bashrc
 ### Basic Usage
 
 ```bash
-# Launch interactive dashboard
-serversentry tui
-
-# Check system status with visual output
+# Check system status
 serversentry status
 
 # Run comprehensive diagnostics
@@ -63,7 +62,7 @@ serversentry diagnostics run
 # Test anomaly detection
 serversentry anomaly test
 
-# Start background monitoring
+# Start monitoring
 serversentry start
 ```
 
@@ -151,17 +150,20 @@ serversentry template validate /path/to/template
 ## 📁 Project Structure
 
 ```
-v2/
+ServerSentry/
 ├── bin/
 │   └── serversentry                 # Main executable
 ├── lib/
 │   ├── core/                        # Core system modules
-│   │   ├── anomaly.sh              # Statistical anomaly detection
-│   │   ├── composite.sh            # Multi-metric logic checks
-│   │   ├── diagnostics.sh          # System health diagnostics
-│   │   ├── plugin_health.sh        # Plugin performance tracking
-│   │   ├── reload.sh               # Dynamic configuration reload
-│   │   └── templates.sh            # Notification template system
+│   │   ├── config.sh               # Configuration management
+│   │   ├── logging.sh              # Logging system
+│   │   ├── plugin.sh               # Plugin management
+│   │   ├── notification.sh         # Notification system
+│   │   ├── anomaly.sh              # Anomaly detection
+│   │   ├── composite.sh            # Composite checks
+│   │   ├── diagnostics.sh          # System diagnostics
+│   │   ├── templates.sh            # Template system
+│   │   └── utils.sh                # Utility functions
 │   ├── plugins/                     # Monitoring plugins
 │   │   ├── cpu/                    # CPU monitoring
 │   │   ├── memory/                 # Memory monitoring
@@ -174,9 +176,9 @@ v2/
 │   │   ├── email/                  # Email (SMTP)
 │   │   └── webhook/                # Generic webhooks
 │   └── ui/
-│       ├── cli/                    # Command-line interface
-│       └── tui/                    # Text-based user interface
+│       └── cli/                    # Command-line interface
 ├── config/                         # Configuration files
+│   ├── serversentry.yaml          # Main configuration
 │   ├── anomaly/                    # Anomaly detection configs
 │   ├── composite/                  # Composite check rules
 │   ├── notifications/              # Notification settings
@@ -193,33 +195,31 @@ v2/
 ### Main Configuration (`config/serversentry.yaml`)
 
 ```yaml
-# Core settings
-enabled: true
-log_level: info
-check_interval: 60
+# Core System Settings
+system:
+  enabled: true
+  log_level: info
+  check_interval: 60
 
-# Plugin configuration
+# Plugin Configuration
 plugins:
   enabled: [cpu, memory, disk, process]
 
-# Notification settings
+# Notification System
 notifications:
   enabled: true
-  providers: [teams, webhook]
+  channels: [teams]
 
-# Anomaly detection
+  teams:
+    webhook_url: "https://your-teams-webhook-url"
+    notification_title: "ServerSentry Alert"
+    enabled: true
+
+# Anomaly Detection
 anomaly_detection:
   enabled: true
   default_sensitivity: 2.0
-
-# Composite checks
-composite_checks:
-  enabled: true
-
-# TUI settings
-tui:
-  auto_refresh: true
-  refresh_interval: 2
+  data_retention_days: 30
 ```
 
 ### Plugin Configuration Example
@@ -230,15 +230,6 @@ cpu_threshold=85
 cpu_warning_threshold=75
 cpu_check_interval=30
 cpu_anomaly_enabled=true
-```
-
-### Notification Provider Example
-
-```bash
-# config/notifications/teams.conf
-teams_webhook_url="https://your-teams-webhook-url"
-teams_template="teams_default"
-teams_enabled=true
 ```
 
 ## 📊 Monitoring Capabilities
@@ -307,9 +298,6 @@ myplugin_plugin_configure() # Configuration setup
 serversentry status --json
 serversentry anomaly test --json
 serversentry diagnostics run --json
-
-# Structured data for external tools
-curl -s http://localhost:8080/api/status | jq '.plugins[].metrics'
 ```
 
 ## 📋 System Requirements
@@ -352,7 +340,6 @@ curl -s http://localhost:8080/api/status | jq '.plugins[].metrics'
 
 - **User Guide**: `docs/user/README.md`
 - **Developer Guide**: `docs/developer/README.md`
-- **API Reference**: `docs/api/README.md`
 - **Migration Guide**: `docs/v1-to-v2/MIGRATION.md`
 
 ## 🤝 Contributing

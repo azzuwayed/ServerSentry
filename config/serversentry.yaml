@@ -1,28 +1,88 @@
 # ServerSentry v2 Configuration
+# Main configuration file for the ServerSentry monitoring system
 
-# General settings
-enabled: true
-log_level: warning
-check_interval: 60
+# Core System Settings
+system:
+  enabled: true
+  log_level: info
+  check_interval: 60
+  check_timeout: 30
+  max_log_size: 10485760 # 10MB
+  max_log_archives: 10
 
-# Notification settings
-notification_enabled: false
-notification_channels: [teams]
+# Plugin Configuration
+plugins:
+  enabled: [cpu, memory, disk, process]
+  directory: lib/plugins
+  config_directory: config/plugins
 
-# Plugin settings
-plugins_enabled: [memory, disk, cpu, process]
+# Notification System
+notifications:
+  enabled: true
+  channels: [teams]
+  cooldown_period: 300 # 5 minutes between notifications
 
-# Teams notification settings
-teams_webhook_url: https://example.webhook.office.com/webhookb2/your-webhook-url
-teams_notification_title: ServerSentry Alert
+  # Teams Integration
+  teams:
+    webhook_url: "https://example.webhook.office.com/webhookb2/your-webhook-url"
+    notification_title: "ServerSentry Alert"
+    enabled: true
 
-# Email notification settings
-email_enabled: false
-email_from: serversentry@example.com
-email_to: admin@example.com
-email_subject: "[ServerSentry] Alert: {status}"
+  # Email Configuration
+  email:
+    enabled: false
+    from: "serversentry@localhost"
+    to: "admin@example.com"
+    subject: "[ServerSentry] Alert: {status}"
+    smtp_server: "localhost"
+    smtp_port: 587
 
-# Advanced settings
-max_log_size: 10485760 # 10MB
-max_log_archives: 10
-check_timeout: 30
+  # Slack Configuration
+  slack:
+    enabled: false
+    webhook_url: ""
+    channel: "#alerts"
+
+  # Discord Configuration
+  discord:
+    enabled: false
+    webhook_url: ""
+
+# Anomaly Detection
+anomaly_detection:
+  enabled: true
+  default_sensitivity: 2.0
+  data_retention_days: 30
+  minimum_data_points: 10
+
+# Composite Checks
+composite_checks:
+  enabled: true
+  config_directory: config/composite
+
+# TUI Dashboard
+tui:
+  enabled: true
+  auto_refresh: true
+  refresh_interval: 2
+  color_scheme: "default"
+
+# Performance Monitoring
+performance:
+  track_plugin_performance: true
+  track_system_performance: true
+  performance_log_retention_days: 7
+
+# Security Settings
+security:
+  file_permissions:
+    config_files: 644
+    log_files: 644
+    directories: 755
+
+# Advanced Features
+advanced:
+  enable_json_output: true
+  enable_webhook_notifications: true
+  enable_template_system: true
+  enable_diagnostics: true

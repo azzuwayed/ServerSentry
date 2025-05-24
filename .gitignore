@@ -1,106 +1,72 @@
-# ServerSentry .gitignore
-# Comprehensive exclusion patterns for the ServerSentry monitoring tool
+# ServerSentry v2 - Git Ignore Configuration
 
-#-------------------------------------------------
-# Log files
-#-------------------------------------------------
-*.log
-serversentry.log
-sysmon.log
-logs/
-*/logs/
-
-#-------------------------------------------------
-# Configuration with sensitive data
-#-------------------------------------------------
-# Webhook configurations contain sensitive URLs
-config/webhooks.conf
-# Backup of configuration files
-config/*.bak
-# User-specific thresholds
-config/user-*.conf
-
-#-------------------------------------------------
-# Runtime data and temporary files
-#-------------------------------------------------
-*.pid
-*.tmp
-*.temp
-.serversentryrc
-.env
-.env.*
-!.env.example
-
-#-------------------------------------------------
-# OS specific files
-#-------------------------------------------------
-# macOS
+# System files
 .DS_Store
-.AppleDouble
-.LSOverride
+.DS_Store?
 ._*
-
-# Linux
-*~
-.directory
-.Trash-*
-
-# Windows
-Thumbs.db
+.Spotlight-V100
+.Trashes
 ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-*.lnk
+Thumbs.db
 
-#-------------------------------------------------
-# Editor and IDE files
-#-------------------------------------------------
-# VS Code
+# IDE and editor files
 .vscode/
-*.code-workspace
-
-# JetBrains
 .idea/
-*.iml
-*.iws
-*.ipr
-
-# Vim
 *.swp
 *.swo
-.*.sw?
+*~
+.vim/
 
-#-------------------------------------------------
-# Development and testing
-#-------------------------------------------------
-/test/
-/tests/
-/testing/
-/temp/
-/tmp/
-# Ignore tmp folders in all subdirectories
-**/tmp/
-# Ignore specific temporary files
-tmp/*
-*/tmp/*
-# Plugin temporary files
-**/plugin_func_*
-**/plugin_loaded_*
-**/plugin_meta_*
-
-#-------------------------------------------------
-# Distribution and packaging
-#-------------------------------------------------
-*.zip
-*.tar.gz
-*.tgz
-dist/
-build/
-
-#-------------------------------------------------
-# Miscellaneous
-#-------------------------------------------------
-# Backup files
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
 *.bak
 *.backup
-*-old
+logs/*.log
+logs/archive/*.log
+logs/anomaly/results/*.json
+logs/diagnostics/reports/*.json
+logs/periodic/*.log
+
+# Test outputs
+test_*.log
+test_output.log
+test_full_output.log
+
+# Configuration overrides
+config/local.yaml
+config/local.conf
+config/*.local.*
+
+# Runtime files
+*.pid
+*.lock
+.serversentry_cache
+tmp/*
+!tmp/.gitkeep
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Package manager files
+node_modules/
+*.egg-info/
+__pycache__/
+
+# OS specific
+*.orig
+.nfs*
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+
+# Development files
+dev_*
+debug_*
+*.debug

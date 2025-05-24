@@ -177,33 +177,75 @@ setup_configuration() {
   if [ ! -f "$BASE_DIR/config/serversentry.yaml" ]; then
     cat >"$BASE_DIR/config/serversentry.yaml" <<EOF
 # ServerSentry v2 Configuration
+# Main configuration file for the ServerSentry monitoring system
 
-# General settings
-enabled: true
-log_level: info
-check_interval: 60
+# Core System Settings
+system:
+  enabled: true
+  log_level: info
+  check_interval: 60
+  check_timeout: 30
+  max_log_size: 10485760  # 10MB
+  max_log_archives: 10
 
-# Plugin settings
-plugins_enabled: [cpu, memory, disk]
+# Plugin Configuration
+plugins:
+  enabled: [cpu, memory, disk]
+  directory: lib/plugins
+  config_directory: config/plugins
 
-# Notification settings
-notification_enabled: true
-notification_channels: []
+# Notification System
+notifications:
+  enabled: true
+  channels: []
+  cooldown_period: 300  # 5 minutes between notifications
+  
+  # Teams Integration
+  teams:
+    webhook_url: ""
+    notification_title: "ServerSentry Alert"
+    enabled: false
+  
+  # Email Configuration
+  email:
+    enabled: false
+    from: "serversentry@localhost"
+    to: ""
+    subject: "[ServerSentry] Alert: {status}"
+    smtp_server: "localhost"
+    smtp_port: 587
 
-# Teams notification settings
-teams_webhook_url: ""
-teams_notification_title: "ServerSentry Alert"
+# Anomaly Detection
+anomaly_detection:
+  enabled: true
+  default_sensitivity: 2.0
+  data_retention_days: 30
+  minimum_data_points: 10
 
-# Email notification settings
-email_enabled: false
-email_from: "serversentry@localhost"
-email_to: ""
-email_subject: "[ServerSentry] Alert: {status}"
+# Composite Checks
+composite_checks:
+  enabled: true
+  config_directory: config/composite
 
-# Advanced settings
-max_log_size: 10485760  # 10MB
-max_log_archives: 10
-check_timeout: 30
+# Performance Monitoring
+performance:
+  track_plugin_performance: true
+  track_system_performance: true
+  performance_log_retention_days: 7
+
+# Security Settings
+security:
+  file_permissions:
+    config_files: 644
+    log_files: 644
+    directories: 755
+
+# Advanced Features
+advanced:
+  enable_json_output: true
+  enable_webhook_notifications: true
+  enable_template_system: true
+  enable_diagnostics: true
 EOF
     print_message "success" "Created main YAML configuration file"
   fi
