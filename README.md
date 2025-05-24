@@ -41,6 +41,7 @@ The installation script handles dependency checks, setting permissions, creating
 
 ```bash
 ./serversentry.sh --help             # Show help message
+./serversentry.sh --interactive      # Launch interactive menu system
 ./serversentry.sh --check            # Perform a one-time system check
 ./serversentry.sh --monitor          # Start monitoring in foreground
 ./serversentry.sh --status           # Show current status and configuration
@@ -49,6 +50,16 @@ The installation script handles dependency checks, setting permissions, creating
 ./serversentry.sh --remove-webhook N # Remove webhook number N
 ./serversentry.sh --update NAME=VAL  # Update threshold (e.g., cpu_threshold=85)
 ./serversentry.sh --list             # List all thresholds and webhooks
+```
+
+You can also use the shorthand flags:
+
+```bash
+./serversentry.sh -i                 # Interactive menu system
+./serversentry.sh -c                 # Check system
+./serversentry.sh -m                 # Monitor
+./serversentry.sh -s                 # Status
+# etc.
 ```
 
 ### Periodic System Reports

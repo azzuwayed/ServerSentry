@@ -1,0 +1,27 @@
+# ServerSentry v2 Configuration
+
+# General settings
+log_level: warning
+check_interval: 60
+
+# Notification settings
+notification_enabled: true
+notification_channels: [teams]
+
+# Plugin settings
+plugins_enabled: [memory,disk,cpu]
+
+# Teams notification settings
+teams_webhook_url: https://example.webhook.office.com/webhookb2/your-webhook-url
+teams_notification_title: ServerSentry Alert
+
+# Email notification settings
+email_enabled: false
+email_from: serversentry@example.com
+email_to: admin@example.com
+email_subject: "[ServerSentry] Alert: {status}"
+
+# Advanced settings
+max_log_size: 10485760 # 10MB
+max_log_archives: 10
+check_timeout: 30

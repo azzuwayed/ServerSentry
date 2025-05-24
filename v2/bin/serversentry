@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# ServerSentry v2 - Main Executable
+#
+# This is the main entry point for the ServerSentry application
+
+set -eo pipefail
+
+# Get the base directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+BASE_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Source core components
+source "$BASE_DIR/lib/core/config.sh"
+
+# Load configuration before logging is initialized
+if ! load_config; then
+  echo "Failed to load configuration" >&2
+  exit 1
+fi
+
+source "$BASE_DIR/lib/core/logging.sh"
+source "$BASE_DIR/lib/core/plugin.sh"
+source "$BASE_DIR/lib/core/utils.sh"
+source "$BASE_DIR/lib/core/notification.sh"
+source "$BASE_DIR/lib/ui/cli/commands.sh"
+
+# Main function
+main() {
+  # Initialize the application
+  log_info "Starting ServerSentry v2"
+
+  # Initialize plugin system
+  if ! init_plugin_system; then
+    log_error "Failed to initialize plugin system"
+    exit 1
+  fi
+
+  # Initialize notification system
+  if ! init_notification_system; then
+    log_error "Failed to initialize notification system"
+    # Non-fatal error, continue without notifications
+    log_warning "Continuing without notification support"
+  fi
+
+  # Process command line arguments
+  process_commands "$@"
+
+  log_info "ServerSentry v2 finished"
+}
+
+# Run the main function with all arguments
+main "$@"

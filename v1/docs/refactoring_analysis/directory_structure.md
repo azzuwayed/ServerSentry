@@ -1,0 +1,20 @@
+# Directory Structure
+```
+.
+--config
+--docs
+----refactoring_analysis
+--lib
+----cli
+----config
+----install
+----log
+----logs
+------archive
+----monitor
+----notify
+----utils
+--logs
+----archive
+--tools
+```
