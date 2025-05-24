@@ -1,162 +1,279 @@
-# ServerSentry Bash Script Linting Guide
+# ServerSentry Bash Linting Guide v3.0
 
-This guide covers the tools and processes for maintaining high-quality bash scripts in the ServerSentry project.
+A comprehensive guide for maintaining high-quality bash scripts in the ServerSentry project using modern tools and best practices.
 
-## Tools Installed
-
-### 1. ShellCheck (Primary Linter)
-
-- **Purpose**: Static analysis for bash scripts
-- **Catches**: Syntax errors, semantic issues, common pitfalls
-- **Installation**: `brew install shellcheck`
-
-### 2. shfmt (Formatter)
-
-- **Purpose**: Automatic code formatting
-- **Features**: Consistent indentation, spacing, structure
-- **Installation**: `brew install shfmt`
-
-## Quick Commands
-
-### Check All Scripts
+## 🎯 Quick Start
 
 ```bash
+# Check all scripts for issues
 ./check-lint.sh
-```
 
-This gives you a quick overview of all lint issues across your bash files.
-
-### Fix All Scripts Automatically
-
-```bash
+# Fix issues automatically
 ./fix-lint.sh
+
+# Dry run to see what would be fixed
+./fix-lint.sh --dry-run
+
+# Rollback changes if needed
+./fix-lint.sh --rollback
 ```
 
-This will:
+## 📋 Table of Contents
 
-- Format all bash scripts with `shfmt`
-- Apply common automatic fixes
-- Create backup files (`.backup` extension)
-- Report remaining issues
+- [Tools Overview](#-tools-overview)
+- [Quick Commands](#-quick-commands)
+- [Advanced Usage](#-advanced-usage)
+- [Configuration](#-configuration)
+- [VS Code Integration](#-vs-code-integration)
+- [Common Issues & Fixes](#-common-issues--fixes)
+- [Best Practices](#-best-practices)
+- [Workflow Guidelines](#-workflow-guidelines)
+- [Troubleshooting](#-troubleshooting)
 
-### Manual Commands
+## 🛠 Tools Overview
 
-#### Check a single file
+### Primary Tools
+
+| Tool | Purpose | Version | Installation |
+|------|---------|---------|--------------|
+| **ShellCheck** | Static analysis & linting | Latest | `brew install shellcheck` |
+| **shfmt** | Code formatting | Latest | `brew install shfmt` |
+
+### Our Enhanced Scripts
+
+| Script | Purpose | Features |
+|--------|---------|----------|
+| `check-lint.sh` | Analysis & reporting | JSON output, filtering, performance metrics |
+| `fix-lint.sh` | Automatic fixing | Smart fixes, backups, rollback, dry-run |
+| `.shellcheckrc` | Configuration | Project-specific settings |
+
+## ⚡ Quick Commands
+
+### Basic Operations
 
 ```bash
-shellcheck path/to/script.sh
+# Analyze all bash files
+./check-lint.sh
+
+# Fix all issues automatically
+./fix-lint.sh
+
+# Check with verbose output
+./check-lint.sh --verbose
+
+# Preview fixes without applying
+./fix-lint.sh --dry-run
 ```
 
-#### Format a single file
+### Filtering & Targeting
 
 ```bash
-shfmt -w -i 2 -ci -sr path/to/script.sh
+# Show only errors
+./check-lint.sh --filter error
+
+# Fix only formatting issues
+./fix-lint.sh --fix formatting
+
+# Exclude test files
+./check-lint.sh --exclude "test*"
+
+# Process specific files
+./fix-lint.sh script1.sh script2.sh
 ```
 
-#### Check all bash files
+### Export & Reporting
 
 ```bash
-find . -name "*.sh" -exec shellcheck {} \;
+# Export JSON report
+./check-lint.sh --json --output report.json
+
+# Show performance metrics
+./check-lint.sh --performance
+
+# Quick summary only
+./check-lint.sh --summary --quiet
 ```
 
-## Configuration
+## 🔧 Advanced Usage
+
+### Check Script Advanced Options
+
+```bash
+# Comprehensive analysis with metrics
+./check-lint.sh --verbose --performance --json --output analysis.json
+
+# Filter by severity level (show warnings and above)
+./check-lint.sh --min-severity warning
+
+# Complex filtering
+./check-lint.sh --filter error --exclude "backup*" --exclude "tmp*"
+
+# CI/CD integration
+./check-lint.sh --json --quiet && echo "All clean!" || echo "Issues found"
+```
+
+### Fix Script Advanced Options
+
+```bash
+# Selective fixing
+./fix-lint.sh --fix formatting --fix quotes --verbose
+
+# Safety features
+./fix-lint.sh --dry-run --verbose  # Preview changes
+./fix-lint.sh --no-backup         # Skip backups (dangerous!)
+./fix-lint.sh --backup-dir ./my-backups  # Custom backup location
+
+# Rollback and recovery
+./fix-lint.sh --rollback           # Restore from recent backups
+./fix-lint.sh --keep-backups 10   # Keep more backup versions
+
+# Automation friendly
+./fix-lint.sh --force --fix formatting  # No prompts
+```
+
+### Available Fix Types
+
+| Fix Type | Description | Example |
+|----------|-------------|---------|
+| `formatting` | Apply shfmt code formatting | Indentation, spacing, structure |
+| `quotes` | Fix unquoted variables | `$var` → `"$var"` |
+| `read-flags` | Add missing -r to read | `read -p` → `read -r -p` |
+| `variables` | Add shellcheck disable comments | For color variables, etc. |
+| `all` | Apply all fixes (default) | Complete automatic fixing |
+
+## ⚙️ Configuration
 
 ### .shellcheckrc
 
-The project includes a `.shellcheckrc` file that disables certain warnings:
-
-- `SC1091`: Not following sourced files (expected for modular design)
-
-You can customize this file to add more suppressions if needed.
-
-## Common Issues and Fixes
-
-### 1. SC2162: read without -r will mangle backslashes
-
-**Problem**: `read -p "Enter value: " var`
-**Fix**: `read -r -p "Enter value: " var`
-**Auto-fixed**: ✅
-
-### 2. SC2086: Double quote to prevent globbing
-
-**Problem**: `command $var`
-**Fix**: `command "$var"`
-**Auto-fixed**: ❌ (requires manual review)
-
-### 3. SC2129: Consider using { cmd1; cmd2; } >> file
-
-**Problem**: Multiple redirects to same file
-**Fix**: Group commands in braces
-**Auto-fixed**: ❌ (requires manual review)
-
-### 4. SC2181: Check exit code directly
-
-**Problem**: `if [ $? -eq 0 ]; then`
-**Fix**: `if command; then`
-**Auto-fixed**: ❌ (requires manual review)
-
-## Workflow Recommendations
-
-### For New Scripts
-
-1. Write your script
-2. Run `shellcheck script.sh` early and often
-3. Format with `shfmt -w -i 2 -ci -sr script.sh`
-4. Fix any remaining issues manually
-
-### For Existing Scripts
-
-1. Run `./check-lint.sh` to see current status
-2. Run `./fix-lint.sh` to auto-fix what's possible
-3. Review and manually fix remaining issues
-4. Remove backup files: `find . -name "*.backup" -delete`
-
-### Before Committing
-
-Always run a final check:
-
 ```bash
-./check-lint.sh
+# Current project configuration
+disable=SC1091    # Not following sourced files (expected)
+
+# You can add more exclusions:
+# disable=SC1091,SC2034,SC2086
 ```
 
-## Manual Fix Examples
-
-### Quoting Variables
+### Common Disable Patterns
 
 ```bash
-# Before
+# Single line disable
+# shellcheck disable=SC2086
+command $intentionally_unquoted
+
+# Multiple rules
+# shellcheck disable=SC2086,SC2034
+source "$config_file"
+
+# Whole file disable (use sparingly)
+# shellcheck disable=SC2034
+```
+
+## 💻 VS Code Integration
+
+### Recommended Extensions
+
+The project includes `.vscode/extensions.json` with:
+
+- **ShellCheck** - Real-time linting
+- **Shell Format** - Automatic formatting  
+- **Bash Debug** - Debugging support
+- **Enhanced Shell Syntax** - Better highlighting
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Shift+L` | Lint current file |
+| `Ctrl+Shift+F` | Format current file |
+| `Ctrl+Shift+A` | Analyze all scripts |
+| `Ctrl+Shift+X` | Auto-fix all scripts |
+| `Ctrl+Shift+T` | Complete test workflow |
+
+### VS Code Tasks
+
+Access via `Ctrl+Shift+P` → "Tasks: Run Task":
+
+- **ShellCheck: Analyze All Scripts** - Project-wide analysis
+- **Fix: Auto-fix All Bash Scripts** - Run the fixer
+- **ShellCheck: Current File** - Lint current file
+- **Format: Current Bash File** - Format with shfmt
+
+### VS Code Settings
+
+Optimized settings in `.vscode/settings.json`:
+
+- Real-time ShellCheck feedback
+- Auto-format on save
+- Enhanced terminal configuration
+- Performance tuning
+
+## 🔍 Common Issues & Fixes
+
+### SC2162: read without -r
+
+```bash
+# ❌ Problem
+read -p "Enter value: " var
+
+# ✅ Fix (automatic)
+read -r -p "Enter value: " var
+```
+
+**Status**: ✅ Auto-fixed by `fix-lint.sh`
+
+### SC2086: Double quote to prevent globbing
+
+```bash
+# ❌ Problem
 rm -rf $temp_dir
 echo $user_input
 
-# After
+# ✅ Fix (manual review needed)
 rm -rf "$temp_dir"
 echo "$user_input"
 ```
 
-### Exit Code Checking
+**Status**: ⚠️ Manual review required (future enhancement planned)
+
+### SC2034: Variable appears unused
 
 ```bash
-# Before
+# ❌ Problem
+RED='\033[0;31m'
+
+# ✅ Fix (automatic)
+# shellcheck disable=SC2034
+RED='\033[0;31m'
+```
+
+**Status**: ✅ Auto-fixed for common variables
+
+### SC2181: Check exit code directly
+
+```bash
+# ❌ Problem
 command
 if [ $? -eq 0 ]; then
     echo "Success"
 fi
 
-# After
+# ✅ Fix (manual)
 if command; then
     echo "Success"
 fi
 ```
 
-### Grouped Redirects
+**Status**: ⚠️ Manual review recommended
+
+### SC2129: Multiple redirects to same file
 
 ```bash
-# Before
+# ❌ Problem
 echo "line1" >> file.txt
 echo "line2" >> file.txt
 echo "line3" >> file.txt
 
-# After
+# ✅ Fix (manual)
 {
     echo "line1"
     echo "line2"
@@ -164,158 +281,298 @@ echo "line3" >> file.txt
 } >> file.txt
 ```
 
-## Suppressing Warnings
+**Status**: ⚠️ Manual optimization recommended
 
-For false positives, you can suppress specific warnings:
+## 📋 Best Practices
 
-```bash
-# shellcheck disable=SC2086
-command $intentionally_unquoted
-
-# Or for the whole file
-# shellcheck disable=SC2086,SC2034
-```
-
-## Integration with VS Code
-
-### Automatic Setup
-
-The project includes a complete VS Code configuration for optimal bash development:
-
-#### Extensions (`.vscode/extensions.json`)
-
-Essential extensions will be recommended when you open the project:
-
-- **ShellCheck**: Real-time linting integration
-- **Shell Format**: Automatic formatting with shfmt
-- **Bash Debug**: Debugging support for bash scripts
-- **Enhanced Shell Syntax**: Better syntax highlighting
-- **GitLens**: Enhanced Git integration
-
-#### Tasks (`.vscode/tasks.json`)
-
-Integrated tasks accessible via `Ctrl+Shift+P` → "Tasks: Run Task":
-
-- **ShellCheck: Analyze All Scripts** - Quick project-wide analysis
-- **Fix: Auto-fix All Bash Scripts** - Run the comprehensive fixer
-- **ShellCheck: Current File** - Lint the currently open file
-- **Format: Current Bash File** - Format current file with shfmt
-- **Test: ShellCheck All & Format All** - Complete workflow (default build task)
-
-#### Keyboard Shortcuts (`.vscode/keybindings.json`)
-
-Quick access while editing bash files:
-
-- `Ctrl+Shift+L` - Lint current file
-- `Ctrl+Shift+F` - Format current file
-- `Ctrl+Shift+A` - Analyze all scripts
-- `Ctrl+Shift+X` - Auto-fix all scripts
-- `Ctrl+Shift+T` - Complete test workflow
-- `F5` - Run demo.sh (when editing demo.sh)
-
-#### Settings (`.vscode/settings.json`)
-
-Optimized for bash development:
-
-- **Real-time linting**: ShellCheck runs as you type
-- **Auto-formatting**: Format on save, paste, and manual trigger
-- **Enhanced terminal**: Better font, colors, and behavior
-- **File associations**: Proper syntax highlighting for all shell files
-- **Performance tuning**: Optimized for large codebases
-
-### Quick Start with VS Code
-
-1. Open the project in VS Code
-2. Install recommended extensions when prompted
-3. Open any `.sh` file
-4. Start coding with real-time feedback!
-
-### VS Code Workflow
-
-1. **Edit**: Write your bash script with real-time ShellCheck feedback
-2. **Format**: `Ctrl+Shift+F` to format current file
-3. **Test**: `Ctrl+Shift+T` to run complete lint workflow
-4. **Debug**: Use breakpoints and bash debugger if needed
-
-## Troubleshooting
-
-### ShellCheck not found
+### Script Headers
 
 ```bash
-brew install shellcheck
+#!/usr/bin/env bash
+#
+# Script description
+# Author: Your Name
+# Version: 1.0
+#
+
+set -euo pipefail  # Strict mode
 ```
 
-### shfmt not found
+### Variable Handling
 
 ```bash
-brew install shfmt
+# ✅ Good: Always quote variables
+rm -rf "$temp_dir"
+echo "User said: $user_input"
+
+# ✅ Good: Use local in functions
+function process_data() {
+    local input_file="$1"
+    local output_file="$2"
+    # ...
+}
+
+# ✅ Good: Check for required variables
+: "${REQUIRED_VAR:?Missing required variable}"
 ```
 
-### Permission denied
+### Error Handling
 
 ```bash
-chmod +x script.sh
+# ✅ Good: Check command success
+if ! command -v git &>/dev/null; then
+    echo "Git is required but not installed"
+    exit 1
+fi
+
+# ✅ Good: Use specific exit codes
+exit_with_error() {
+    echo "Error: $1" >&2
+    exit "${2:-1}"
+}
 ```
 
-### Too many false positives
-
-Edit `.shellcheckrc` to disable specific warnings:
+### Arrays and Lists
 
 ```bash
-disable=SC1091,SC2034,SC2086
+# ✅ Good: Use arrays for multiple values
+declare -a files=("file1.txt" "file2.txt" "file3.txt")
+
+# ✅ Good: Iterate safely
+for file in "${files[@]}"; do
+    process_file "$file"
+done
 ```
 
-### VS Code Extensions Not Installing
+## 🔄 Workflow Guidelines
 
-1. Open Command Palette (`Cmd+Shift+P`)
-2. Run "Extensions: Show Recommended Extensions"
-3. Install the recommended extensions manually
+### For New Scripts
 
-## Best Practices
+1. **Start with template**:
+   ```bash
+   #!/usr/bin/env bash
+   set -euo pipefail
+   ```
 
-1. **Use strict mode**: Add `set -euo pipefail` to scripts
-2. **Quote variables**: Always quote `"$variables"`
-3. **Check exit codes**: Use `if command; then` instead of `if [ $? -eq 0 ]`
-4. **Use local variables**: Declare function variables as `local`
-5. **Validate inputs**: Check arguments before using them
-6. **Use arrays for lists**: Instead of space-separated strings
-7. **Consistent formatting**: Let shfmt handle indentation and spacing
-8. **Real-time feedback**: Use VS Code with ShellCheck extension for immediate feedback
+2. **Develop with real-time feedback**:
+   - Use VS Code with ShellCheck extension
+   - Run `./check-lint.sh script.sh` frequently
 
-## Files Overview
+3. **Format regularly**:
+   ```bash
+   shfmt -w -i 2 -ci -sr script.sh
+   ```
 
-### Core Linting Scripts
+4. **Final check**:
+   ```bash
+   ./check-lint.sh script.sh
+   ```
 
-- `fix-lint.sh`: Comprehensive auto-fixer
-- `check-lint.sh`: Quick analysis tool
-- `.shellcheckrc`: Configuration file
+### For Existing Scripts
 
-### VS Code Integration
+1. **Analyze current state**:
+   ```bash
+   ./check-lint.sh --verbose
+   ```
 
-- `.vscode/settings.json`: Editor configuration for bash development
-- `.vscode/tasks.json`: Integrated task definitions
-- `.vscode/keybindings.json`: Keyboard shortcuts for quick access
-- `.vscode/extensions.json`: Recommended extensions
+2. **Apply automatic fixes**:
+   ```bash
+   ./fix-lint.sh --dry-run  # Preview first
+   ./fix-lint.sh            # Apply fixes
+   ```
+
+3. **Review and test**:
+   ```bash
+   ./check-lint.sh          # Verify fixes
+   # Test script functionality
+   ```
+
+4. **Handle remaining issues**:
+   - Review manual fix suggestions
+   - Add disable comments for false positives
+   - Optimize code structure
+
+### Before Committing
+
+```bash
+# Final quality check
+./check-lint.sh --performance
+
+# Ensure no critical issues
+./check-lint.sh --filter error
+```
+
+### CI/CD Integration
+
+```bash
+# In your CI pipeline
+./check-lint.sh --json --output lint-results.json
+if [ $? -ne 0 ]; then
+    echo "Linting issues found"
+    exit 1
+fi
+```
+
+## 🐛 Troubleshooting
+
+### Tool Installation Issues
+
+```bash
+# macOS with Homebrew
+brew install shellcheck shfmt
+
+# Ubuntu/Debian
+sudo apt update
+sudo apt install shellcheck
+snap install shfmt
+
+# Manual installation check
+command -v shellcheck || echo "ShellCheck not found"
+command -v shfmt || echo "shfmt not found"
+```
+
+### Permission Issues
+
+```bash
+# Make scripts executable
+chmod +x check-lint.sh fix-lint.sh
+
+# Fix file permissions
+find . -name "*.sh" -exec chmod +x {} \;
+```
+
+### Performance Issues
+
+```bash
+# For large codebases, use filtering
+./check-lint.sh --exclude "vendor*" --exclude "node_modules*"
+
+# Process specific directories
+find ./src -name "*.sh" | head -20 | xargs ./check-lint.sh
+```
+
+### VS Code Issues
+
+1. **Extensions not installing**:
+   - Open Command Palette (`Cmd+Shift+P`)
+   - Run "Extensions: Show Recommended Extensions"
+   - Install manually
+
+2. **ShellCheck not working**:
+   - Check if shellcheck is in PATH
+   - Restart VS Code after installation
+   - Check `.vscode/settings.json`
+
+3. **Formatting not working**:
+   - Verify shfmt installation
+   - Check file associations in settings
+   - Try manual format: `Ctrl+Shift+F`
+
+### Backup and Recovery
+
+```bash
+# List available backups
+ls -la backups/
+
+# Manual rollback for specific file
+cp backups/script.sh.20231201_120000.backup script.sh
+
+# Clean up old backups
+find backups/ -name "*.backup" -mtime +30 -delete
+```
+
+## 📊 Quality Metrics
+
+### Target Standards
+
+- **Error rate**: 0 errors
+- **Warning rate**: < 5 warnings per 100 lines
+- **Style compliance**: 100% shfmt formatted
+- **Coverage**: 100% of bash files checked
+
+### Measuring Progress
+
+```bash
+# Get baseline metrics
+./check-lint.sh --json --output baseline.json
+
+# Track improvements
+./check-lint.sh --json | jq '.summary'
+
+# Performance tracking
+./check-lint.sh --performance --verbose
+```
+
+## 🚀 Advanced Features
+
+### Custom Fix Development
+
+To add new fix types to `fix-lint.sh`:
+
+1. Add to the fix type validation
+2. Implement the fix function
+3. Add to the processing pipeline
+4. Update documentation
+
+### Integration Examples
+
+```bash
+# Git pre-commit hook
+#!/bin/bash
+./check-lint.sh --quiet || exit 1
+
+# Makefile target
+lint:
+	./check-lint.sh
+
+fix:
+	./fix-lint.sh --force
+
+# GitHub Actions
+- name: Lint bash scripts
+  run: |
+    ./check-lint.sh --json --output results.json
+    cat results.json | jq '.summary'
+```
+
+## 📚 Resources
 
 ### Documentation
 
-- `LINT-GUIDE.md`: This comprehensive guide
+- [ShellCheck Wiki](https://github.com/koalaman/shellcheck/wiki)
+- [shfmt GitHub](https://github.com/mvdan/sh)
+- [Bash Manual](https://www.gnu.org/software/bash/manual/)
 
-## Summary
+### External Tools
+
+- [bashdb](http://bashdb.sourceforge.net/) - Bash debugger
+- [bats](https://github.com/bats-core/bats-core) - Bash testing framework
+- [shellharden](https://github.com/anordal/shellharden) - Additional hardening
+
+## 🎉 Summary
 
 You now have a **professional-grade bash development environment** with:
 
-✅ **Automatic linting** with ShellCheck
-✅ **Auto-formatting** with shfmt  
-✅ **VS Code integration** with tasks and shortcuts
-✅ **Real-time feedback** as you code
-✅ **One-click fixes** for common issues
-✅ **Comprehensive documentation**
+✅ **Intelligent analysis** with enhanced filtering and reporting  
+✅ **Smart automatic fixing** with safety features  
+✅ **Comprehensive VS Code integration** with real-time feedback  
+✅ **Flexible workflows** for any project size  
+✅ **Backup and rollback** capabilities  
+✅ **Performance optimization** and metrics  
+✅ **CI/CD ready** with JSON export  
 
-**Quick Commands:**
+### Essential Commands
 
-- `./check-lint.sh` - See all issues
-- `./fix-lint.sh` - Auto-fix everything possible
-- `Ctrl+Shift+T` in VS Code - Complete workflow
+| Command | Purpose |
+|---------|---------|
+| `./check-lint.sh` | Analyze all files |
+| `./fix-lint.sh` | Fix issues automatically |
+| `./fix-lint.sh --dry-run` | Preview changes |
+| `./fix-lint.sh --rollback` | Undo changes |
+| `./check-lint.sh --json` | Export results |
 
-Happy linting! 🚀
+**Happy linting!** 🚀
+
+---
+
+*Last updated: Version 3.0 - Enhanced tools with intelligent fixing and comprehensive reporting*

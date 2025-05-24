@@ -72,7 +72,7 @@ main() {
   echo "• Template management"
   echo "• Plugin system"
   echo ""
-  read -p "Press Enter to continue..."
+  read -r -p "Press Enter to continue..."
 
   # Setup
   demo_print_step "1. Setting up ServerSentry v2"

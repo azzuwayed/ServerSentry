@@ -1,9 +1,39 @@
-# ShellCheck configuration for ServerSentry
-# Disable certain warnings that are expected in this project
+# ShellCheck configuration for ServerSentry v3.0
+# Enhanced configuration for bash script linting
 
+# Core project exclusions
 # SC1091: Not following sourced files (expected for modular design)
+# This is common in projects with configuration files and libraries
 disable=SC1091
 
-# SC2034: Variable appears unused (some variables are used in sourced files)
-# Uncomment if you want to disable this warning globally
-# disable=SC1091,SC2034 
+# Additional common exclusions (uncomment as needed):
+
+# SC2034: Variable appears unused
+# Useful for color variables and configuration that may be used in sourced files
+# disable=SC1091,SC2034
+
+# SC2086: Double quote to prevent globbing and word splitting
+# Sometimes intentional for certain patterns
+# disable=SC1091,SC2086
+
+# SC2155: Declare and assign separately to avoid masking return values
+# Sometimes acceptable for simple assignments
+# disable=SC1091,SC2155
+
+# SC2181: Check exit code directly with e.g. 'if mycmd;', not indirectly with $?
+# Legacy code may use this pattern intentionally
+# disable=SC1091,SC2181
+
+# File-specific configurations can also be added:
+# For files that need multiple exclusions, use individual disable comments
+
+# Example of a comprehensive disable for heavily customized scripts:
+# disable=SC1091,SC2034,SC2086,SC2155,SC2181
+
+# Project-specific patterns:
+# - Scripts in bin/ may need SC2155 disabled for installer patterns
+# - Library files in lib/ may need SC2034 for exported variables
+# - Demo scripts may need relaxed rules for readability
+
+# To disable warnings for specific script sections:
+# Use: # shellcheck disable=SC#### in the script itself
