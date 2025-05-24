@@ -21,6 +21,11 @@ if ! logging_init; then
   exit 1
 fi
 
+# Run startup optimizations
+if declare -f util_performance_optimize_startup >/dev/null 2>&1; then
+  util_performance_optimize_startup
+fi
+
 # Load configuration with new standardized function
 if ! config_load; then
   log_error "Failed to load configuration"

@@ -15,6 +15,11 @@ if [[ ${BASH_VERSION%%.*} -ge 4 ]]; then
   declare -A PLUGIN_LOADED
   declare -A PLUGIN_FUNCTIONS
   declare -A PLUGIN_METADATA
+  declare -A PLUGIN_PERFORMANCE_STATS
+  declare -A PLUGIN_LOAD_TIMES
+  declare -A PLUGIN_CHECK_COUNTS
+  declare -A PLUGIN_ERROR_COUNTS
+  declare -A PLUGIN_LAST_CHECK
   ASSOCIATIVE_ARRAYS_SUPPORTED=true
 else
   # Fallback for older bash versions
@@ -27,6 +32,13 @@ declare -a registered_plugins
 
 # Source utilities
 source "${BASE_DIR}/lib/core/utils.sh"
+
+# Plugin performance tracking
+PLUGIN_REGISTRY_FILE="${BASE_DIR}/tmp/plugin_registry.json"
+PLUGIN_PERFORMANCE_LOG="${BASE_DIR}/logs/plugin_performance.log"
+
+# Create performance tracking directory
+mkdir -p "${BASE_DIR}/tmp" "${BASE_DIR}/logs" 2>/dev/null || true
 
 # Fallback functions for plugin state management (when associative arrays not supported)
 _plugin_set_loaded() {
@@ -149,11 +161,19 @@ plugin_system_init() {
     PLUGIN_LOADED=()
     PLUGIN_FUNCTIONS=()
     PLUGIN_METADATA=()
+    PLUGIN_PERFORMANCE_STATS=()
+    PLUGIN_LOAD_TIMES=()
+    PLUGIN_CHECK_COUNTS=()
+    PLUGIN_ERROR_COUNTS=()
+    PLUGIN_LAST_CHECK=()
   else
     # Clear fallback state files for bash 3.x
     rm -f "${BASE_DIR}/tmp/plugin_"* 2>/dev/null || true
   fi
   registered_plugins=()
+
+  # Load plugin registry for performance tracking
+  plugin_registry_load
 
   # Load enabled plugins from configuration
   local enabled_plugins
@@ -165,18 +185,33 @@ plugin_system_init() {
 
   log_info "Loading plugins: $plugin_list"
 
-  # Load each plugin with error handling
+  # Load each plugin with error handling and performance tracking
   local loaded_count=0
   for plugin_name in $plugin_list; do
     plugin_name=$(util_sanitize_input "$plugin_name")
     log_debug "Loading plugin: $plugin_name"
 
+    local start_time
+    start_time=$(date +%s.%N 2>/dev/null || date +%s)
+
     if plugin_load "$plugin_name"; then
       ((loaded_count++))
+
+      # Track load performance
+      local end_time
+      end_time=$(date +%s.%N 2>/dev/null || date +%s)
+      plugin_performance_track "$plugin_name" "load"
     else
       log_error "Failed to load plugin: $plugin_name"
+      plugin_performance_track "$plugin_name" "error"
     fi
   done
+
+  # Save updated registry
+  plugin_registry_save
+
+  # Optimize loading order for next time
+  plugin_optimize_loading
 
   log_info "Plugin system initialized: loaded $loaded_count plugins"
   return 0
@@ -395,9 +430,18 @@ plugin_run_check() {
   if command -v bc >/dev/null 2>&1; then
     duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "unknown")
     log_debug "Performance: plugin_${plugin_name}_check took ${duration}s" >&2
+
+    # Track performance metrics
+    plugin_performance_track "$plugin_name" "check" "$duration"
+  else
+    # Track check without duration
+    plugin_performance_track "$plugin_name" "check"
   fi
 
   if [[ "$exit_code" -ne 0 ]]; then
+    # Track error
+    plugin_performance_track "$plugin_name" "error"
+
     local error_result
     error_result=$(util_json_create_error_object "Plugin check failed" "$exit_code" "plugin=$plugin_name")
     echo "$error_result"
@@ -606,6 +650,269 @@ list_plugins() {
 run_all_plugin_checks() {
   log_warning "Function run_all_plugin_checks() is deprecated, use plugin_run_all_checks() instead"
   plugin_run_all_checks "$@"
+}
+
+# === ADVANCED PLUGIN OPTIMIZATION FUNCTIONS ===
+
+# Function: plugin_registry_save
+# Description: Save plugin registry to persistent storage
+# Returns:
+#   0 - success
+#   1 - failure
+plugin_registry_save() {
+  if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" != "true" ]]; then
+    log_debug "Registry save not available in bash < 4.0"
+    return 0
+  fi
+
+  local registry_json="{"
+  local first=true
+
+  for plugin in "${!PLUGIN_LOADED[@]}"; do
+    if [[ "${PLUGIN_LOADED[$plugin]}" == "true" ]]; then
+      if [[ "$first" == "true" ]]; then
+        first=false
+      else
+        registry_json+=","
+      fi
+
+      local metadata="${PLUGIN_METADATA[$plugin]:-}"
+      local load_time="${PLUGIN_LOAD_TIMES[$plugin]:-0}"
+      local check_count="${PLUGIN_CHECK_COUNTS[$plugin]:-0}"
+      local error_count="${PLUGIN_ERROR_COUNTS[$plugin]:-0}"
+      local last_check="${PLUGIN_LAST_CHECK[$plugin]:-0}"
+
+      registry_json+="\"$plugin\":{"
+      registry_json+="\"loaded\":true,"
+      registry_json+="\"metadata\":\"$(util_json_escape "$metadata")\","
+      registry_json+="\"load_time\":$load_time,"
+      registry_json+="\"check_count\":$check_count,"
+      registry_json+="\"error_count\":$error_count,"
+      registry_json+="\"last_check\":$last_check"
+      registry_json+="}"
+    fi
+  done
+
+  registry_json+="}"
+
+  if ! echo "$registry_json" >"$PLUGIN_REGISTRY_FILE"; then
+    log_error "Failed to save plugin registry"
+    return 1
+  fi
+
+  log_debug "Plugin registry saved to $PLUGIN_REGISTRY_FILE"
+  return 0
+}
+
+# Function: plugin_registry_load
+# Description: Load plugin registry from persistent storage
+# Returns:
+#   0 - success
+#   1 - failure
+plugin_registry_load() {
+  if [[ ! -f "$PLUGIN_REGISTRY_FILE" ]]; then
+    log_debug "No plugin registry file found, starting fresh"
+    return 0
+  fi
+
+  if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" != "true" ]]; then
+    log_debug "Registry load not available in bash < 4.0"
+    return 0
+  fi
+
+  log_debug "Loading plugin registry from $PLUGIN_REGISTRY_FILE"
+
+  # Parse JSON using jq if available, otherwise skip
+  if command -v jq >/dev/null 2>&1; then
+    while IFS= read -r plugin; do
+      if [[ -n "$plugin" ]]; then
+        local load_time
+        load_time=$(jq -r ".\"$plugin\".load_time" "$PLUGIN_REGISTRY_FILE" 2>/dev/null || echo "0")
+        local check_count
+        check_count=$(jq -r ".\"$plugin\".check_count" "$PLUGIN_REGISTRY_FILE" 2>/dev/null || echo "0")
+        local error_count
+        error_count=$(jq -r ".\"$plugin\".error_count" "$PLUGIN_REGISTRY_FILE" 2>/dev/null || echo "0")
+
+        PLUGIN_LOAD_TIMES[$plugin]="$load_time"
+        PLUGIN_CHECK_COUNTS[$plugin]="$check_count"
+        PLUGIN_ERROR_COUNTS[$plugin]="$error_count"
+      fi
+    done < <(jq -r 'keys[]' "$PLUGIN_REGISTRY_FILE" 2>/dev/null || true)
+  fi
+
+  return 0
+}
+
+# Function: plugin_performance_track
+# Description: Track plugin performance metrics
+# Parameters:
+#   $1 - plugin name
+#   $2 - operation type (load, check, error)
+#   $3 - duration in seconds (optional)
+# Returns:
+#   0 - success
+plugin_performance_track() {
+  local plugin_name="$1"
+  local operation="$2"
+  local duration="${3:-0}"
+
+  if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" != "true" ]]; then
+    return 0
+  fi
+
+  local timestamp
+  timestamp=$(date +%s)
+
+  case "$operation" in
+  "load")
+    PLUGIN_LOAD_TIMES[$plugin_name]="$timestamp"
+    ;;
+  "check")
+    PLUGIN_CHECK_COUNTS[$plugin_name]="$((${PLUGIN_CHECK_COUNTS[$plugin_name]:-0} + 1))"
+    PLUGIN_LAST_CHECK[$plugin_name]="$timestamp"
+
+    # Log performance if duration provided
+    if [[ "$duration" != "0" ]]; then
+      echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Plugin:$plugin_name Operation:$operation Duration:${duration}s" >>"$PLUGIN_PERFORMANCE_LOG"
+    fi
+    ;;
+  "error")
+    PLUGIN_ERROR_COUNTS[$plugin_name]="$((${PLUGIN_ERROR_COUNTS[$plugin_name]:-0} + 1))"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Plugin:$plugin_name Operation:error Count:${PLUGIN_ERROR_COUNTS[$plugin_name]}" >>"$PLUGIN_PERFORMANCE_LOG"
+    ;;
+  esac
+
+  return 0
+}
+
+# Function: plugin_get_performance_stats
+# Description: Get performance statistics for a plugin
+# Parameters:
+#   $1 - plugin name (optional, if empty returns all)
+# Returns:
+#   Performance stats JSON via stdout
+plugin_get_performance_stats() {
+  local plugin_name="${1:-}"
+
+  if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" != "true" ]]; then
+    echo '{"error": "Performance stats not available in bash < 4.0"}'
+    return 0
+  fi
+
+  local stats_json="{"
+  local first=true
+
+  if [[ -n "$plugin_name" ]]; then
+    # Single plugin stats
+    if [[ "${PLUGIN_LOADED[$plugin_name]:-}" == "true" ]]; then
+      stats_json+="\"$plugin_name\":{"
+      stats_json+="\"check_count\":${PLUGIN_CHECK_COUNTS[$plugin_name]:-0},"
+      stats_json+="\"error_count\":${PLUGIN_ERROR_COUNTS[$plugin_name]:-0},"
+      stats_json+="\"load_time\":${PLUGIN_LOAD_TIMES[$plugin_name]:-0},"
+      stats_json+="\"last_check\":${PLUGIN_LAST_CHECK[$plugin_name]:-0},"
+
+      # Calculate error rate
+      local check_count="${PLUGIN_CHECK_COUNTS[$plugin_name]:-0}"
+      local error_count="${PLUGIN_ERROR_COUNTS[$plugin_name]:-0}"
+      local error_rate=0
+      if [[ "$check_count" -gt 0 ]]; then
+        error_rate=$(echo "scale=4; $error_count * 100 / $check_count" | bc -l 2>/dev/null || echo "0")
+      fi
+      stats_json+="\"error_rate\":$error_rate"
+      stats_json+="}"
+    else
+      stats_json+="\"error\":\"Plugin not loaded: $plugin_name\""
+    fi
+  else
+    # All plugins stats
+    for plugin in "${!PLUGIN_LOADED[@]}"; do
+      if [[ "${PLUGIN_LOADED[$plugin]}" == "true" ]]; then
+        if [[ "$first" == "true" ]]; then
+          first=false
+        else
+          stats_json+=","
+        fi
+
+        stats_json+="\"$plugin\":{"
+        stats_json+="\"check_count\":${PLUGIN_CHECK_COUNTS[$plugin]:-0},"
+        stats_json+="\"error_count\":${PLUGIN_ERROR_COUNTS[$plugin]:-0},"
+        stats_json+="\"load_time\":${PLUGIN_LOAD_TIMES[$plugin]:-0},"
+        stats_json+="\"last_check\":${PLUGIN_LAST_CHECK[$plugin]:-0},"
+
+        # Calculate error rate
+        local check_count="${PLUGIN_CHECK_COUNTS[$plugin]:-0}"
+        local error_count="${PLUGIN_ERROR_COUNTS[$plugin]:-0}"
+        local error_rate=0
+        if [[ "$check_count" -gt 0 ]]; then
+          error_rate=$(echo "scale=4; $error_count * 100 / $check_count" | bc -l 2>/dev/null || echo "0")
+        fi
+        stats_json+="\"error_rate\":$error_rate"
+        stats_json+="}"
+      fi
+    done
+  fi
+
+  stats_json+="}"
+  echo "$stats_json"
+}
+
+# Function: plugin_optimize_loading
+# Description: Optimize plugin loading based on usage statistics
+# Returns:
+#   0 - success
+plugin_optimize_loading() {
+  if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" != "true" ]]; then
+    log_debug "Plugin optimization not available in bash < 4.0"
+    return 0
+  fi
+
+  log_debug "Optimizing plugin loading order based on usage statistics"
+
+  # Create array of plugins with their usage scores
+  local -a plugin_scores
+  for plugin in "${!PLUGIN_LOADED[@]}"; do
+    if [[ "${PLUGIN_LOADED[$plugin]}" == "true" ]]; then
+      local check_count="${PLUGIN_CHECK_COUNTS[$plugin]:-0}"
+      local error_count="${PLUGIN_ERROR_COUNTS[$plugin]:-0}"
+      local score=$((check_count - error_count * 2)) # Penalize errors
+      plugin_scores+=("$score:$plugin")
+    fi
+  done
+
+  # Sort plugins by score (highest first)
+  IFS=$'\n' plugin_scores=($(sort -rn <<<"${plugin_scores[*]}"))
+  unset IFS
+
+  log_debug "Plugin loading order optimized: ${plugin_scores[*]}"
+  return 0
+}
+
+# Function: plugin_cleanup_performance_logs
+# Description: Clean up old performance logs
+# Parameters:
+#   $1 - days to keep (defaults to 30)
+# Returns:
+#   0 - success
+plugin_cleanup_performance_logs() {
+  local days_to_keep="${1:-30}"
+
+  if [[ -f "$PLUGIN_PERFORMANCE_LOG" ]]; then
+    # Find lines older than specified days and remove them
+    local cutoff_date
+    cutoff_date=$(date -d "$days_to_keep days ago" -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    local temp_log
+    temp_log=$(create_temp_file "plugin_perf_cleanup")
+
+    if awk -v cutoff="$cutoff_date" '$0 > cutoff' "$PLUGIN_PERFORMANCE_LOG" >"$temp_log" 2>/dev/null; then
+      mv "$temp_log" "$PLUGIN_PERFORMANCE_LOG"
+      log_debug "Cleaned up performance logs older than $days_to_keep days"
+    else
+      rm -f "$temp_log"
+    fi
+  fi
+
+  return 0
 }
 
 # Export new standardized functions

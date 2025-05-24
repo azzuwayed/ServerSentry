@@ -118,6 +118,54 @@ Each plugin must implement these functions:
 | `generate_plugin_health_report(file)`               | Generate health report              | `$1`: output file                       | 0=success, 1=failure |
 | `cleanup_health_logs(days)`                         | Cleanup old health logs             | `$1`: days to keep                      | 0=success            |
 
+### Plugin Performance Tracking (`lib/core/plugin.sh`)
+
+| Function                            | Purpose                           | Parameters                                    | Returns                |
+| ----------------------------------- | --------------------------------- | --------------------------------------------- | ---------------------- |
+| `plugin_registry_save()`            | Save plugin registry to storage   | None                                          | 0=success, 1=failure   |
+| `plugin_registry_load()`            | Load plugin registry from storage | None                                          | 0=success, 1=failure   |
+| `plugin_performance_track()`        | Track plugin performance metrics  | `$1`: plugin, `$2`: operation, `$3`: duration | 0=success              |
+| `plugin_get_performance_stats()`    | Get performance statistics        | `$1`: plugin name (optional)                  | Performance stats JSON |
+| `plugin_optimize_loading()`         | Optimize plugin loading order     | None                                          | 0=success              |
+| `plugin_cleanup_performance_logs()` | Clean up old performance logs     | `$1`: days to keep (default: 30)              | 0=success              |
+
+### Command Caching Utilities (`lib/core/utils/command_utils.sh`)
+
+| Function                           | Purpose                               | Parameters                               | Returns                |
+| ---------------------------------- | ------------------------------------- | ---------------------------------------- | ---------------------- |
+| `util_cached_command()`            | Execute command with caching          | `$1`: command, `$2`: duration, `$3`: key | Command output         |
+| `util_command_cache_clear()`       | Clear command cache                   | `$1`: pattern (optional)                 | 0=success              |
+| `util_command_cache_stats()`       | Get cache statistics                  | None                                     | Cache stats JSON       |
+| `util_command_cache_cleanup()`     | Clean up expired cache entries        | `$1`: max age seconds (default: 3600)    | 0=success              |
+| `util_batch_commands()`            | Execute multiple commands efficiently | `$@`: commands to execute                | Combined results       |
+| `util_optimize_common_commands()`  | Pre-cache common system commands      | None                                     | 0=success              |
+| `util_command_exists_cached()`     | Cached command existence check        | `$1`: command name                       | 0=exists, 1=not exists |
+| `util_get_cached_timestamp()`      | Get cached timestamp                  | `$1`: cache duration (default: 1)        | Unix timestamp         |
+| `util_get_cached_formatted_date()` | Get cached formatted date             | `$1`: format, `$2`: duration             | Formatted date         |
+
+### Performance Measurement (`lib/core/utils/performance_utils.sh`)
+
+| Function                               | Purpose                        | Parameters                                       | Returns                |
+| -------------------------------------- | ------------------------------ | ------------------------------------------------ | ---------------------- |
+| `util_performance_timer_start()`       | Start a performance timer      | `$1`: timer name                                 | 0=success              |
+| `util_performance_timer_stop()`        | Stop timer and return duration | `$1`: timer name                                 | Duration in seconds    |
+| `util_performance_measure()`           | Measure performance of command | `$1`: operation name, `$@`: command              | Command output         |
+| `util_performance_counter_increment()` | Increment performance counter  | `$1`: counter name, `$2`: increment (default: 1) | 0=success              |
+| `util_performance_counter_get()`       | Get counter value              | `$1`: counter name                               | Counter value          |
+| `util_performance_benchmark_system()`  | Run system benchmark           | None                                             | Benchmark results JSON |
+| `util_performance_get_stats()`         | Get performance statistics     | None                                             | Performance stats JSON |
+| `util_performance_cleanup_logs()`      | Clean up old performance logs  | `$1`: days to keep (default: 7)                  | 0=success              |
+| `util_performance_optimize_startup()`  | Run startup optimizations      | None                                             | 0=success              |
+
+### Configuration Caching (`lib/core/utils/config_utils.sh`)
+
+| Function                           | Purpose                       | Parameters                                  | Returns              |
+| ---------------------------------- | ----------------------------- | ------------------------------------------- | -------------------- |
+| `util_config_get_cached()`         | Get cached configuration      | `$1`: file, `$2`: namespace, `$3`: duration | 0=success, 1=failure |
+| `util_config_parse_yaml()`         | Parse YAML with caching       | `$1`: file, `$2`: namespace, `$3`: defaults | 0=success, 1=failure |
+| `util_config_validate_values()`    | Validate configuration values | `$1`: rules array, `$2`: namespace          | 0=valid, 1=invalid   |
+| `util_config_load_env_overrides()` | Load environment overrides    | `$1`: prefix, `$2`: namespace               | 0=success            |
+
 ---
 
 ## 📢 Notification System Functions

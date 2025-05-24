@@ -36,6 +36,8 @@ init_utilities() {
     "json_utils.sh"
     "array_utils.sh"
     "config_utils.sh"
+    "command_utils.sh"
+    "performance_utils.sh"
   )
 
   for module in "${utility_modules[@]}"; do
@@ -79,7 +81,12 @@ init_utilities
 
 # Check if command exists
 command_exists() {
-  command -v "$1" >/dev/null 2>&1
+  # Use cached version if available, fallback to original
+  if declare -f util_command_exists_cached >/dev/null 2>&1; then
+    util_command_exists_cached "$1"
+  else
+    command -v "$1" >/dev/null 2>&1
+  fi
 }
 
 # Check if running as root
@@ -188,13 +195,24 @@ is_dir_writable() {
 
 # Get timestamp
 get_timestamp() {
-  date +%s
+  # Use cached version if available, fallback to original
+  if declare -f util_get_cached_timestamp >/dev/null 2>&1; then
+    util_get_cached_timestamp 1
+  else
+    date +%s
+  fi
 }
 
 # Get formatted date
 get_formatted_date() {
   local format="${1:-"%Y-%m-%d %H:%M:%S"}"
-  date +"$format"
+
+  # Use cached version if available, fallback to original
+  if declare -f util_get_cached_formatted_date >/dev/null 2>&1; then
+    util_get_cached_formatted_date "$format" 1
+  else
+    date +"$format"
+  fi
 }
 
 # Safe file write (write to temp file, then move)
