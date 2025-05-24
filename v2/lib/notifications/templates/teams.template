@@ -1,0 +1,25 @@
+{
+  "@type": "MessageCard",
+  "@context": "http://schema.org/extensions",
+  "themeColor": "{color}",
+  "summary": "ServerSentry Alert",
+  "sections": [{
+    "activityTitle": "{status_text} Alert",
+    "activitySubtitle": "{hostname}",
+    "activityImage": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/assets/Alert/SVG/ic_fluent_alert_24_regular.svg",
+    "facts": [{
+      "name": "Message",
+      "value": "{status_message}"
+    }, {
+      "name": "Plugin",
+      "value": "{plugin_name}"
+    }, {
+      "name": "Time",
+      "value": "{timestamp}"
+    }, {
+      "name": "Status Code",
+      "value": "{status_code}"
+    }],
+    "markdown": true
+  }]
+}

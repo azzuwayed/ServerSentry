@@ -1,0 +1,13 @@
+🧪 **Test Notification** from {hostname}
+
+This is a test notification to verify your ServerSentry configuration.
+
+**Time:** {timestamp}
+**Plugin:** {plugin_name}
+
+{metrics}
+
+If you received this message, your notification system is working correctly!
+
+---
+*ServerSentry v2 Monitoring System*

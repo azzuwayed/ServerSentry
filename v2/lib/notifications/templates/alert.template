@@ -1,0 +1,11 @@
+🚨 **{status_text}** Alert on {hostname}
+
+**Message:** {status_message}
+**Plugin:** {plugin_name}
+**Time:** {timestamp}
+**Status Code:** {status_code}
+
+{metrics}
+
+---
+*ServerSentry v2 Monitoring System*

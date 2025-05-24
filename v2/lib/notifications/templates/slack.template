@@ -1,0 +1,21 @@
+{
+  "text": "{status_text} Alert from {hostname}",
+  "attachments": [{
+    "color": "{color}",
+    "fields": [{
+      "title": "Message",
+      "value": "{status_message}",
+      "short": false
+    }, {
+      "title": "Plugin",
+      "value": "{plugin_name}",
+      "short": true
+    }, {
+      "title": "Time",
+      "value": "{timestamp}",
+      "short": true
+    }],
+    "footer": "ServerSentry v2",
+    "ts": {timestamp_epoch}
+  }]
+}

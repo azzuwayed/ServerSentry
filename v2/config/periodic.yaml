@@ -1,0 +1,20 @@
+# ServerSentry v2 Periodic Monitoring Configuration
+
+# Enable periodic monitoring
+enabled: true
+
+# Interval between full system reports (in hours)
+report_interval: 24
+
+# Notification settings for periodic reports
+notify_on_report: true
+
+# Report retention (number of reports to keep)
+report_retention: 30
+
+# Silence period after alerts (in minutes)
+silence_period: 60
+
+# Emergency notification settings
+emergency_contacts: []
+emergency_threshold: 3

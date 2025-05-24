@@ -1,0 +1,12 @@
+{
+  "hostname": "{hostname}",
+  "timestamp": "{timestamp}",
+  "status_code": {status_code},
+  "status_text": "{status_text}",
+  "status_message": "{status_message}",
+  "plugin_name": "{plugin_name}",
+  "metrics": {metrics},
+  "color": "{color}",
+  "title": "ServerSentry Alert - {hostname}",
+  "description": "{status_message}"
+}
