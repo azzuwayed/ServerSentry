@@ -177,8 +177,8 @@ EOF
   # Send to Teams
   log_debug "Sending notification to Teams webhook"
 
-  # Check if curl is installed
-  if ! command_exists curl; then
+  # Check if curl is installed using compatibility layer
+  if ! compat_command_exists curl; then
     log_error "Cannot send Teams notification: 'curl' command not found"
     return 1
   fi

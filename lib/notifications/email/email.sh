@@ -59,19 +59,19 @@ email_provider_configure() {
   # Validate method-specific requirements
   case "$email_send_method" in
   mail)
-    if ! command_exists mail; then
+    if ! compat_command_exists mail; then
       log_error "Mail command not found, cannot use 'mail' method"
       return 1
     fi
     ;;
   sendmail)
-    if ! command_exists sendmail; then
+    if ! compat_command_exists sendmail; then
       log_error "Sendmail command not found, cannot use 'sendmail' method"
       return 1
     fi
     ;;
   smtp)
-    if ! command_exists curl; then
+    if ! compat_command_exists curl; then
       log_error "Curl command not found, cannot use 'smtp' method"
       return 1
     fi
@@ -136,7 +136,7 @@ EOF
 
   # Add details if available
   if [ -n "$details" ]; then
-    if command_exists jq && echo "$details" | jq -e . >/dev/null 2>&1; then
+    if compat_command_exists jq && echo "$details" | jq -e . >/dev/null 2>&1; then
       # Format JSON details nicely
       body="${body}
 
@@ -174,8 +174,8 @@ send_via_mail() {
 
   log_debug "Sending email via mail command"
 
-  # Check if mail command exists
-  if ! command_exists mail; then
+  # Check if mail command exists using compatibility layer
+  if ! compat_command_exists mail; then
     log_error "Cannot send email: 'mail' command not found"
     return 1
   fi
@@ -200,8 +200,8 @@ send_via_sendmail() {
 
   log_debug "Sending email via sendmail command"
 
-  # Check if sendmail command exists
-  if ! command_exists sendmail; then
+  # Check if sendmail command exists using compatibility layer
+  if ! compat_command_exists sendmail; then
     log_error "Cannot send email: 'sendmail' command not found"
     return 1
   fi
@@ -241,8 +241,8 @@ send_via_smtp() {
 
   log_debug "Sending email via SMTP"
 
-  # Check if curl command exists
-  if ! command_exists curl; then
+  # Check if curl command exists using compatibility layer
+  if ! compat_command_exists curl; then
     log_error "Cannot send email: 'curl' command not found"
     return 1
   fi

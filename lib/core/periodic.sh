@@ -191,21 +191,11 @@ generate_system_report() {
 
   # Add system information
   local hostname
-  hostname=$(hostname)
+  hostname=$(compat_get_hostname)
   local os_type
-  os_type=$(get_os_type)
+  os_type=$(compat_get_os)
   local os_version
-  if [ "$os_type" = "linux" ]; then
-    if [ -f /etc/os-release ]; then
-      os_version=$(source /etc/os-release && echo "$PRETTY_NAME")
-    else
-      os_version=$(uname -r)
-    fi
-  elif [ "$os_type" = "macos" ]; then
-    os_version=$(sw_vers -productVersion)
-  else
-    os_version=$(uname -r)
-  fi
+  os_version=$(compat_get_os_version)
 
   # Basic system info
   report_data=$(echo "$report_data" | jq --arg hostname "$hostname" \
@@ -297,7 +287,7 @@ should_generate_report() {
 
   if [ -f "$PERIODIC_STATE_FILE" ] && [ -s "$PERIODIC_STATE_FILE" ]; then
     # Try to use jq if available
-    if command_exists jq; then
+    if compat_command_exists jq; then
       last_report_time=$(jq -r ".last_report // 0" "$PERIODIC_STATE_FILE")
     else
       # Simple grep-based approach if jq is not available
@@ -320,7 +310,7 @@ should_generate_report() {
 
     if [ -f "$PERIODIC_STATE_FILE" ] && [ -s "$PERIODIC_STATE_FILE" ]; then
       # Try to use jq if available
-      if command_exists jq; then
+      if compat_command_exists jq; then
         jq --arg time "$current_time" \
           '. + {"last_report": $time}' \
           "$PERIODIC_STATE_FILE" >"$temp_file"
@@ -399,7 +389,7 @@ show_periodic_status() {
 
   if [ -f "$PERIODIC_STATE_FILE" ] && [ -s "$PERIODIC_STATE_FILE" ]; then
     # Try to use jq if available
-    if command_exists jq; then
+    if compat_command_exists jq; then
       last_report_time=$(jq -r ".last_report // 0" "$PERIODIC_STATE_FILE")
     else
       # Simple grep-based approach if jq is not available

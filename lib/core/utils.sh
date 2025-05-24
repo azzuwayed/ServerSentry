@@ -68,39 +68,80 @@ init_utilities() {
 }
 
 # Initialize utilities when this module is sourced
-# Only initialize if logging is available
-# Temporarily disabled to avoid syntax errors in utility modules
-# if declare -f log_debug >/dev/null 2>&1; then
-#   init_utilities
-# fi
+# Ensure basic logging functions are available first
+if ! declare -f log_debug >/dev/null 2>&1; then
+  log_debug() { echo "[DEBUG] $1" >&2; }
+  log_warning() { echo "[WARNING] $1" >&2; }
+  log_error() { echo "[ERROR] $1" >&2; }
+fi
+
+# Source compatibility utilities first
+if [[ -f "$BASE_DIR/lib/core/utils/compat_utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils/compat_utils.sh"
+fi
+
+# Initialize utility modules if logging is available
+if declare -f log_debug >/dev/null 2>&1; then
+  init_utilities
+fi
 
 # === ENHANCED UTILITY FUNCTIONS ===
 # These functions provide enhanced operations with modern patterns
 
-# Check if command exists
+# Backward compatibility wrapper for command_exists
 command_exists() {
-  # Use cached version if available, fallback to original
+  local command="$1"
+
+  # Use compatibility layer if available
+  if declare -f compat_command_exists >/dev/null 2>&1; then
+    compat_command_exists "$command"
+    return $?
+  fi
+
+  # Fallback to cached version if available
   if declare -f util_command_exists_cached >/dev/null 2>&1; then
     util_command_exists_cached "$1"
-  else
-    command -v "$1" >/dev/null 2>&1
+    return $?
   fi
+
+  # Basic fallback
+  command -v "$command" >/dev/null 2>&1
+}
+
+# Backward compatibility wrapper for get_os_type
+get_os_type() {
+  # Use compatibility layer if available
+  if declare -f compat_get_os >/dev/null 2>&1; then
+    compat_get_os
+    return $?
+  fi
+
+  # Fallback implementation
+  case "$(uname -s)" in
+  Darwin*)
+    echo "macos"
+    ;;
+  Linux*)
+    if [[ -f /etc/os-release ]]; then
+      echo "linux"
+    elif command_exists lsb_release; then
+      echo "linux"
+    else
+      echo "linux"
+    fi
+    ;;
+  CYGWIN* | MINGW* | MSYS*)
+    echo "windows"
+    ;;
+  *)
+    echo "unknown"
+    ;;
+  esac
 }
 
 # Check if running as root
 is_root() {
   [[ "$(id -u)" -eq 0 ]]
-}
-
-# Get operating system type
-get_os_type() {
-  case "$(uname -s)" in
-  Linux*) echo "linux" ;;
-  Darwin*) echo "macos" ;;
-  CYGWIN*) echo "windows" ;;
-  MINGW*) echo "windows" ;;
-  *) echo "unknown" ;;
-  esac
 }
 
 # Get OS distribution (for Linux)
@@ -211,13 +252,13 @@ is_dir_writable() {
   [[ -d "$dir" && -w "$dir" ]]
 }
 
-# Get timestamp
+# Enhanced get_timestamp function
 get_timestamp() {
-  # Use cached version if available, fallback to original
-  if declare -f util_get_cached_timestamp >/dev/null 2>&1; then
-    util_get_cached_timestamp 1
+  # Use compatibility layer if available
+  if declare -f compat_date >/dev/null 2>&1; then
+    compat_date --iso-8601=seconds 2>/dev/null || date '+%Y-%m-%dT%H:%M:%S%z'
   else
-    date +%s
+    date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date
   fi
 }
 
@@ -372,6 +413,61 @@ measure_performance() {
   return "$exit_code"
 }
 
+# Cross-platform file size function
+get_file_size() {
+  local file="$1"
+
+  # Use compatibility layer if available
+  if declare -f compat_stat_size >/dev/null 2>&1; then
+    compat_stat_size "$file"
+  else
+    # Fallback
+    if [[ -f "$file" ]]; then
+      case "$(uname -s)" in
+      Darwin*)
+        stat -f%z "$file" 2>/dev/null
+        ;;
+      Linux*)
+        stat -c%s "$file" 2>/dev/null
+        ;;
+      *)
+        ls -l "$file" 2>/dev/null | awk '{print $5}'
+        ;;
+      esac
+    else
+      echo "0"
+    fi
+  fi
+}
+
+# Cross-platform file modification time
+get_file_mtime() {
+  local file="$1"
+
+  # Use compatibility layer if available
+  if declare -f compat_stat_mtime >/dev/null 2>&1; then
+    compat_stat_mtime "$file"
+  else
+    # Fallback
+    if [[ -f "$file" ]]; then
+      case "$(uname -s)" in
+      Darwin*)
+        stat -f%m "$file" 2>/dev/null
+        ;;
+      Linux*)
+        stat -c%Y "$file" 2>/dev/null
+        ;;
+      *)
+        # Basic fallback - not very accurate
+        echo ""
+        ;;
+      esac
+    else
+      echo ""
+    fi
+  fi
+}
+
 # Export modern utility functions
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f command_exists
@@ -396,4 +492,6 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f log_error_context
   export -f retry_operation
   export -f measure_performance
+  export -f get_file_size
+  export -f get_file_mtime
 fi

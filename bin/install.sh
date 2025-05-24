@@ -1,10 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Installation Script
 #
 # This script installs and configures ServerSentry v2
 
 set -eo pipefail
+
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+BASE_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Source compatibility utilities
+source "$BASE_DIR/lib/core/utils/compat_utils.sh"
 
 # Enforce root privileges or auto-elevate
 if [ "$(id -u)" -ne 0 ]; then
@@ -17,10 +24,6 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
   fi
 fi
-
-# Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Define colors for terminal output
 RED='\033[0;31m'
@@ -71,7 +74,7 @@ check_dependencies() {
   local deps=("bash" "curl" "jq")
 
   for dep in "${deps[@]}"; do
-    if command -v "$dep" &>/dev/null; then
+    if compat_command_exists "$dep"; then
       print_message "success" "✓ $dep is installed"
     else
       print_message "error" "✗ $dep is not installed"
@@ -79,19 +82,34 @@ check_dependencies() {
     fi
   done
 
-  # Check bash version (need 5.0 or higher)
-  local bash_version
-  bash_version=$(bash --version | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
-  local bash_major
+  # Check bash version using compatibility layer
+  local bash_path bash_version bash_major
+  bash_path=$(compat_get_bash_path)
+  bash_version=$(compat_get_bash_version)
   bash_major=$(echo "$bash_version" | cut -d. -f1)
-  local bash_minor
-  bash_minor=$(echo "$bash_version" | cut -d. -f2)
 
-  if [ "$bash_major" -lt 5 ]; then
-    print_message "error" "✗ Bash version $bash_version detected, but version 5.0+ is required"
+  if ! compat_bash_is_compatible; then
+    print_message "error" "✗ Bash version $bash_version detected at $bash_path, but version 4.0+ is required"
+    print_message "info" "Detected OS: $(compat_get_os) $(compat_get_os_version)"
+    print_message "info" "Package manager: $(compat_get_package_manager)"
+
+    case "$(compat_get_package_manager)" in
+    brew)
+      print_message "info" "Install newer bash with: brew install bash"
+      ;;
+    apt)
+      print_message "info" "Your system should have bash 4.0+. Check your PATH."
+      ;;
+    yum | dnf)
+      print_message "info" "Install newer bash with: $(compat_get_package_manager) install bash"
+      ;;
+    *)
+      print_message "info" "Please install bash 4.0+ for your system"
+      ;;
+    esac
     missing_deps=$((missing_deps + 1))
   else
-    print_message "success" "✓ Bash version $bash_version is compatible"
+    print_message "success" "✓ Bash version $bash_version is compatible (found at $bash_path)"
   fi
 
   # Check for optional dependencies
@@ -101,7 +119,7 @@ check_dependencies() {
   print_message "info" "Checking optional dependencies..."
 
   for dep in "${opt_deps[@]}"; do
-    if command -v "$dep" &>/dev/null; then
+    if compat_command_exists "$dep"; then
       print_message "success" "✓ $dep is installed (optional)"
     else
       print_message "warning" "✗ $dep is not installed (optional)"
@@ -122,31 +140,25 @@ setup_directories() {
   print_message "info" "Setting up directories..."
 
   # Create log directory
-  if [ ! -d "$BASE_DIR/logs" ]; then
-    mkdir -p "$BASE_DIR/logs"
-    print_message "success" "Created logs directory"
-  fi
+  compat_mkdir "$BASE_DIR/logs" 755
+  print_message "success" "Created logs directory"
 
   # Create log archive directory
-  if [ ! -d "$BASE_DIR/logs/archive" ]; then
-    mkdir -p "$BASE_DIR/logs/archive"
-    print_message "success" "Created logs archive directory"
-  fi
+  compat_mkdir "$BASE_DIR/logs/archive" 755
+  print_message "success" "Created logs archive directory"
 
   # Create periodic results directory
-  if [ ! -d "$BASE_DIR/logs/periodic" ]; then
-    mkdir -p "$BASE_DIR/logs/periodic"
-    print_message "success" "Created periodic results directory"
-  fi
+  compat_mkdir "$BASE_DIR/logs/periodic" 755
+  print_message "success" "Created periodic results directory"
 
-  # Set permissions
-  chmod 755 "$BASE_DIR/bin/serversentry"
-  chmod 755 "$BASE_DIR/bin/install.sh"
+  # Set permissions using compatibility layer
+  compat_chmod 755 "$BASE_DIR/bin/serversentry"
+  compat_chmod 755 "$BASE_DIR/bin/install.sh"
   chmod -R 755 "$BASE_DIR/lib"
   chmod -R 644 "$BASE_DIR/logs"
-  chmod 755 "$BASE_DIR/logs"
-  chmod 755 "$BASE_DIR/logs/archive"
-  chmod 755 "$BASE_DIR/logs/periodic"
+  compat_chmod 755 "$BASE_DIR/logs"
+  compat_chmod 755 "$BASE_DIR/logs/archive"
+  compat_chmod 755 "$BASE_DIR/logs/periodic"
 
   print_message "success" "Directories and permissions set up"
 }
@@ -329,14 +341,31 @@ setup_cron() {
 create_symlink() {
   print_message "info" "Creating symbolic link..."
 
+  local bin_dir="/usr/local/bin"
+
+  # Use OS-specific binary paths
+  case "$(compat_get_os)" in
+  macos)
+    # Try Homebrew paths first on macOS
+    if [[ -d "/opt/homebrew/bin" ]]; then
+      bin_dir="/opt/homebrew/bin"
+    elif [[ -d "/usr/local/bin" ]]; then
+      bin_dir="/usr/local/bin"
+    fi
+    ;;
+  linux)
+    bin_dir="/usr/local/bin"
+    ;;
+  esac
+
   # Check if we have permission to create the symlink
-  if [ -w /usr/local/bin ]; then
-    ln -sf "$BASE_DIR/bin/serversentry" /usr/local/bin/serversentry
-    print_message "success" "Created symbolic link at /usr/local/bin/serversentry"
+  if [[ -w "$bin_dir" ]]; then
+    ln -sf "$BASE_DIR/bin/serversentry" "$bin_dir/serversentry"
+    print_message "success" "Created symbolic link at $bin_dir/serversentry"
   else
     print_message "warning" "Cannot create symbolic link. Permission denied."
     print_message "info" "To create the symlink manually, run:"
-    print_message "info" "sudo ln -sf \"$BASE_DIR/bin/serversentry\" /usr/local/bin/serversentry"
+    print_message "info" "sudo ln -sf \"$BASE_DIR/bin/serversentry\" \"$bin_dir/serversentry\""
   fi
 }
 
@@ -362,7 +391,7 @@ configure_webhooks() {
       echo "Microsoft Teams Configuration:"
       read -p "Enter Teams webhook URL: " teams_webhook_url
 
-      # Update the Teams configuration file
+      # Create the Teams configuration file
       cat >"$BASE_DIR/config/notifications/teams.conf" <<EOF
 # Teams Notification Provider Configuration
 teams_webhook_url="$teams_webhook_url"
@@ -385,7 +414,7 @@ EOF
       echo "Slack Configuration:"
       read -p "Enter Slack webhook URL: " slack_webhook_url
 
-      # Update the Slack configuration file
+      # Create the Slack configuration file
       cat >"$BASE_DIR/config/notifications/slack.conf" <<EOF
 # Slack Notification Provider Configuration
 slack_webhook_url="$slack_webhook_url"
@@ -410,7 +439,7 @@ EOF
       echo "Discord Configuration:"
       read -p "Enter Discord webhook URL: " discord_webhook_url
 
-      # Update the Discord configuration file
+      # Create the Discord configuration file
       cat >"$BASE_DIR/config/notifications/discord.conf" <<EOF
 # Discord Notification Provider Configuration
 discord_webhook_url="$discord_webhook_url"
@@ -436,7 +465,7 @@ EOF
       read -p "Enter sender email (default: serversentry@hostname): " email_sender
 
       if [ -z "$email_sender" ]; then
-        email_sender="serversentry@$(hostname -f 2>/dev/null || echo 'localhost')"
+        email_sender="serversentry@$(compat_get_hostname)"
       fi
 
       echo "Select email send method:"
@@ -517,10 +546,7 @@ EOF
 
   # Update main config with notification channels
   if [ -n "$notification_channels" ]; then
-    sed -i.bak "s/notification_channels=.*/notification_channels=$notification_channels/" "$BASE_DIR/config/serversentry.yaml" 2>/dev/null ||
-      sed "s/notification_channels=.*/notification_channels=$notification_channels/" "$BASE_DIR/config/serversentry.yaml" >"$BASE_DIR/config/serversentry.yaml.new" &&
-      mv "$BASE_DIR/config/serversentry.yaml.new" "$BASE_DIR/config/serversentry.yaml"
-
+    compat_sed_inplace "s/notification_channels=.*/notification_channels=$notification_channels/" "$BASE_DIR/config/serversentry.yaml"
     print_message "success" "Updated notification channels in main configuration"
   fi
 }
@@ -536,10 +562,7 @@ configure_process_monitoring() {
     read -p "Enter process names to monitor (comma-separated): " process_names
 
     # Update the process plugin configuration
-    sed -i.bak "s/process_names=.*/process_names=$process_names/" "$BASE_DIR/config/plugins/process.conf" 2>/dev/null ||
-      sed "s/process_names=.*/process_names=$process_names/" "$BASE_DIR/config/plugins/process.conf" >"$BASE_DIR/config/plugins/process.conf.new" &&
-      mv "$BASE_DIR/config/plugins/process.conf.new" "$BASE_DIR/config/plugins/process.conf"
-
+    compat_sed_inplace "s/process_names=.*/process_names=$process_names/" "$BASE_DIR/config/plugins/process.conf"
     print_message "success" "Process monitoring configured"
   else
     print_message "info" "Skipping process monitoring configuration"
@@ -680,6 +703,10 @@ main() {
 
   # Show usage instructions
   show_usage
+
+  # Show system compatibility information
+  print_message "info" "System compatibility information:"
+  compat_info
 
   print_message "success" "ServerSentry v2 installation complete!"
 }

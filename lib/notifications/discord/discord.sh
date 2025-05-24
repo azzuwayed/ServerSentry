@@ -121,7 +121,7 @@ EOF
   )
 
   # Check if details are provided and add them to the payload
-  if [ -n "$details" ] && command_exists jq; then
+  if [ -n "$details" ] && compat_command_exists jq; then
     # Try to parse details as JSON
     if echo "$details" | jq -e . >/dev/null 2>&1; then
       # Extract metrics
@@ -158,8 +158,8 @@ EOF
   # Send to Discord
   log_debug "Sending notification to Discord webhook"
 
-  # Check if curl is installed
-  if ! command_exists curl; then
+  # Check if curl is installed using compatibility layer
+  if ! compat_command_exists curl; then
     log_error "Cannot send Discord notification: 'curl' command not found"
     return 1
   fi

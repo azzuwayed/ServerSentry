@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - CPU Monitoring Plugin
 #
@@ -59,58 +59,75 @@ cpu_plugin_check() {
   local status_code=0
   local status_message="OK"
 
-  # Get CPU usage based on OS
-  local os_type
-  os_type=$(get_os_type)
+  # Get CPU usage using compatibility layer
+  result=$(compat_get_cpu_usage 2>/dev/null)
 
-  case "$os_type" in
-  linux)
-    # Linux-style - using top
-    if command_exists top; then
-      result=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
-    else
+  # Check if we got a valid result
+  if [[ -z "$result" || "$result" == "0.0" ]]; then
+    # Fallback to OS-specific methods if compatibility layer fails
+    local os_type
+    os_type=$(compat_get_os)
+
+    case "$os_type" in
+    linux)
+      # Linux-style - using /proc/stat if available
+      if [[ -r /proc/stat ]]; then
+        result=$(awk '/^cpu /{u=$2+$4; t=$2+$3+$4+$5; if (NR==1){u1=u; t1=t;} else print (u-u1) * 100 / (t-t1); }' <(
+          grep 'cpu ' /proc/stat
+          sleep 1
+          grep 'cpu ' /proc/stat
+        ) 2>/dev/null)
+      elif compat_command_exists top; then
+        result=$(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+      else
+        result="unknown"
+        status_code=3
+        status_message="Cannot determine CPU usage: required commands not found"
+      fi
+      ;;
+
+    macos)
+      # macOS-style - using iostat if available
+      if compat_command_exists iostat; then
+        result=$(iostat -c 1 2 2>/dev/null | tail -1 | awk '{print 100 - $6}')
+      elif compat_command_exists top; then
+        result=$(top -l 1 | grep "CPU usage" | awk '{print $3}' | tr -d "%")
+      else
+        result="unknown"
+        status_code=3
+        status_message="Cannot determine CPU usage: required commands not found"
+      fi
+      ;;
+
+    *)
+      # Unsupported OS
       result="unknown"
       status_code=3
-      status_message="Cannot determine CPU usage: 'top' command not found"
-    fi
-    ;;
-
-  macos)
-    # macOS-style - using top
-    if command_exists top; then
-      result=$(top -l 1 | grep "CPU usage" | awk '{print $3}' | tr -d "%")
-    else
-      result="unknown"
-      status_code=3
-      status_message="Cannot determine CPU usage: 'top' command not found"
-    fi
-    ;;
-
-  *)
-    # Unsupported OS
-    result="unknown"
-    status_code=3
-    status_message="Unsupported OS type: $os_type"
-    ;;
-  esac
+      status_message="Unsupported OS type: $os_type"
+      ;;
+    esac
+  fi
 
   # Check thresholds if we got a numeric result
   if [[ "$result" =~ ^[0-9.]+$ ]]; then
     # Format to one decimal place
     result=$(printf "%.1f" "$result")
 
-    if (($(echo "$result >= $cpu_threshold" | bc -l))); then
+    if (($(echo "$result >= $cpu_threshold" | bc -l 2>/dev/null || awk -v a="$result" -v b="$cpu_threshold" 'BEGIN{print (a>=b)?"1":"0"}'))); then
       status_code=2
       status_message="CRITICAL: CPU usage is ${result}%, threshold: ${cpu_threshold}%"
-    elif (($(echo "$result >= $cpu_warning_threshold" | bc -l))); then
+    elif (($(echo "$result >= $cpu_warning_threshold" | bc -l 2>/dev/null || awk -v a="$result" -v b="$cpu_warning_threshold" 'BEGIN{print (a>=b)?"1":"0"}'))); then
       status_code=1
       status_message="WARNING: CPU usage is ${result}%, threshold: ${cpu_warning_threshold}%"
     else
       status_message="OK: CPU usage is ${result}%"
     fi
+  elif [[ "$result" == "unknown" && "$status_code" -eq 0 ]]; then
+    status_code=3
+    status_message="Cannot determine CPU usage"
   fi
 
-  # Get timestamp
+  # Get timestamp using compatibility layer if available
   local timestamp
   timestamp=$(get_timestamp)
 

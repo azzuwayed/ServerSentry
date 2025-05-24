@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # ServerSentry v2 - Main Executable
 #
@@ -21,6 +21,9 @@ for arg in "$@"; do
     ;;
   esac
 done
+
+# Source compatibility utilities first
+source "$BASE_DIR/lib/core/utils/compat_utils.sh"
 
 # Source core components in proper order
 source "$BASE_DIR/lib/core/logging.sh" # Load logging first

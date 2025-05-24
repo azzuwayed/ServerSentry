@@ -67,14 +67,18 @@ disk_plugin_check() {
   local all_used=()
   local all_avail=()
 
-  # Get disk usage from df command
-  if ! command_exists df; then
+  # Check if df command exists using compatibility layer
+  if ! compat_command_exists df; then
     status_code=3
     status_message="Cannot determine disk usage: 'df' command not found"
 
     # Create empty results
     local timestamp
-    timestamp=$(get_timestamp)
+    if compat_command_exists compat_date; then
+      timestamp=$(compat_date --iso-8601=seconds)
+    else
+      timestamp=$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date)
+    fi
 
     cat <<EOF
 {
@@ -94,9 +98,64 @@ EOF
     return 0
   fi
 
-  # Get disk information from df
+  # Get disk information using compatibility layer
   local df_output
-  df_output=$(df -kP)
+  df_output=$(compat_df -kP 2>/dev/null)
+
+  # Fallback to regular df if compatibility function fails
+  if [[ -z "$df_output" ]]; then
+    df_output=$(df -kP 2>/dev/null)
+  fi
+
+  # If still no output, use OS-specific approach
+  if [[ -z "$df_output" ]]; then
+    local os_type
+    os_type=$(compat_get_os)
+
+    case "$os_type" in
+    macos)
+      # macOS sometimes needs different df flags
+      df_output=$(df -k 2>/dev/null)
+      ;;
+    linux)
+      # Linux standard df
+      df_output=$(df -kP 2>/dev/null)
+      ;;
+    *)
+      df_output=$(df 2>/dev/null)
+      ;;
+    esac
+  fi
+
+  # Check if we got any output
+  if [[ -z "$df_output" ]]; then
+    status_code=3
+    status_message="Cannot determine disk usage: no output from df command"
+
+    local timestamp
+    if compat_command_exists compat_date; then
+      timestamp=$(compat_date --iso-8601=seconds)
+    else
+      timestamp=$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || date)
+    fi
+
+    cat <<EOF
+{
+  "plugin": "disk",
+  "status_code": ${status_code},
+  "status_message": "${status_message}",
+  "metrics": {
+    "highest_usage": 0,
+    "most_used_mount": "",
+    "mounts": [],
+    "threshold": ${disk_threshold},
+    "warning_threshold": ${disk_warning_threshold}
+  },
+  "timestamp": "${timestamp}"
+}
+EOF
+    return 0
+  fi
 
   # Convert monitored paths to array
   IFS=',' read -r -a monitored_paths <<<"$disk_monitored_paths"

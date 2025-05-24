@@ -121,7 +121,7 @@ EOF
   )
 
   # Check if details are provided and add them to the payload
-  if [ -n "$details" ] && command_exists jq; then
+  if [ -n "$details" ] && compat_command_exists jq; then
     # Try to parse details as JSON
     if echo "$details" | jq -e . >/dev/null 2>&1; then
       # Extract metrics
@@ -129,30 +129,15 @@ EOF
       metrics_json=$(echo "$details" | jq -c '.metrics // {}')
 
       # Create fields for metrics
-      local fields_json=""
+      local fields_text=""
       while IFS="=" read -r key value; do
         [ -z "$key" ] && continue
-
-        # Add comma separator if not first item
-        if [ -n "$fields_json" ]; then
-          fields_json+=","
-        fi
-
-        # Add field
-        fields_json+=$(
-          cat <<EOF
-{
-  "title": "${key}",
-  "value": "${value}",
-  "short": true
-}
-EOF
-        )
+        fields_text+="*${key}:* ${value}\n"
       done < <(echo "$metrics_json" | jq -r 'to_entries | .[] | .key + "=" + (.value | tostring)')
 
       # Update payload with fields if we have any
-      if [ -n "$fields_json" ]; then
-        payload=$(echo "$payload" | jq --argjson fields "[$fields_json]" '.attachments[0].fields = $fields')
+      if [ -n "$fields_text" ]; then
+        payload=$(echo "$payload" | jq --arg fields "$fields_text" '.attachments[0].text += "\n\n" + $fields')
       fi
     else
       # Just add details as text
@@ -163,8 +148,8 @@ EOF
   # Send to Slack
   log_debug "Sending notification to Slack webhook"
 
-  # Check if curl is installed
-  if ! command_exists curl; then
+  # Check if curl is installed using compatibility layer
+  if ! compat_command_exists curl; then
     log_error "Cannot send Slack notification: 'curl' command not found"
     return 1
   fi

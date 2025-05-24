@@ -65,133 +65,152 @@ memory_plugin_check() {
   local swap_total=0
   local swap_used=0
 
-  # Get memory usage based on OS
-  local os_type
-  os_type=$(get_os_type)
+  # Try to get memory information using compatibility layer first
+  local memory_info
+  memory_info=$(compat_get_memory_info 2>/dev/null)
 
-  case "$os_type" in
-  linux)
-    # Linux-style - using free
-    if command_exists free; then
-      # Get memory information
-      local mem_info
-      mem_info=$(free -b)
+  if [[ -n "$memory_info" && "$memory_info" != "total:0 used:0 free:0" ]]; then
+    # Parse the compatibility layer output
+    total_memory=$(echo "$memory_info" | awk -F: '{print $2}' | awk '{print $1}')
+    used_memory=$(echo "$memory_info" | awk -F: '{print $3}' | awk '{print $1}')
+    free_memory=$(echo "$memory_info" | awk -F: '{print $4}' | awk '{print $1}')
 
-      # Parse total memory
-      total_memory=$(echo "$mem_info" | awk '/^Mem:/ {print $2}')
+    # Convert from MB to bytes for consistency
+    total_memory=$(echo "$total_memory * 1024 * 1024" | bc 2>/dev/null || awk -v n="$total_memory" 'BEGIN{print n * 1024 * 1024}')
+    used_memory=$(echo "$used_memory * 1024 * 1024" | bc 2>/dev/null || awk -v n="$used_memory" 'BEGIN{print n * 1024 * 1024}')
+    free_memory=$(echo "$free_memory * 1024 * 1024" | bc 2>/dev/null || awk -v n="$free_memory" 'BEGIN{print n * 1024 * 1024}')
+  else
+    # Fallback to OS-specific methods
+    local os_type
+    os_type=$(compat_get_os)
 
-      # Parse used memory (depending on configuration)
-      if [ "$memory_include_buffers_cache" = "true" ]; then
-        # Include buffers/cache in used memory
-        used_memory=$(echo "$mem_info" | awk '/^Mem:/ {print $3}')
+    case "$os_type" in
+    linux)
+      # Linux-style - using /proc/meminfo if available
+      if [[ -r /proc/meminfo ]]; then
+        # Parse /proc/meminfo directly
+        total_memory=$(awk '/MemTotal:/ {print $2 * 1024}' /proc/meminfo)
+
+        if [ "$memory_include_buffers_cache" = "true" ]; then
+          # Include buffers/cache in used memory
+          local available_memory
+          available_memory=$(awk '/MemAvailable:/ {print $2 * 1024}' /proc/meminfo)
+          if [[ -n "$available_memory" ]]; then
+            used_memory=$((total_memory - available_memory))
+          else
+            local free_mem buffers cached
+            free_mem=$(awk '/MemFree:/ {print $2 * 1024}' /proc/meminfo)
+            buffers=$(awk '/^Buffers:/ {print $2 * 1024}' /proc/meminfo)
+            cached=$(awk '/^Cached:/ {print $2 * 1024}' /proc/meminfo)
+            used_memory=$((total_memory - free_mem - buffers - cached))
+          fi
+        else
+          # Exclude buffers/cache from used memory
+          local available_memory
+          available_memory=$(awk '/MemAvailable:/ {print $2 * 1024}' /proc/meminfo)
+          if [[ -n "$available_memory" ]]; then
+            used_memory=$((total_memory - available_memory))
+          else
+            local free_mem
+            free_mem=$(awk '/MemFree:/ {print $2 * 1024}' /proc/meminfo)
+            used_memory=$((total_memory - free_mem))
+          fi
+        fi
+
+        free_memory=$((total_memory - used_memory))
+
+      elif compat_command_exists free; then
+        # Fallback to free command
+        local mem_info
+        mem_info=$(free -b)
+        total_memory=$(echo "$mem_info" | awk '/^Mem:/ {print $2}')
+
+        if [ "$memory_include_buffers_cache" = "true" ]; then
+          used_memory=$(echo "$mem_info" | awk '/^Mem:/ {print $3}')
+        else
+          used_memory=$(echo "$mem_info" | awk '/^Mem:/ {print $3 - $6 - $7}')
+        fi
+
+        free_memory=$((total_memory - used_memory))
       else
-        # Exclude buffers/cache from used memory
-        used_memory=$(echo "$mem_info" | awk '/^Mem:/ {print $3 - $6 - $7}')
+        result="unknown"
+        status_code=3
+        status_message="Cannot determine memory usage: required commands not found"
       fi
+      ;;
 
-      # Calculate free memory
-      free_memory=$((total_memory - used_memory))
+    macos)
+      # macOS-style - use sysctl and vm_stat
+      if compat_command_exists vm_stat && compat_command_exists sysctl; then
+        # Get page size and memory stats
+        local page_size
+        page_size=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
 
-      # Get swap information if needed
-      if [ "$memory_include_swap" = "true" ]; then
-        swap_total=$(echo "$mem_info" | awk '/^Swap:/ {print $2}')
-        swap_used=$(echo "$mem_info" | awk '/^Swap:/ {print $3}')
+        local vm_stat_output
+        vm_stat_output=$(vm_stat 2>/dev/null)
+
+        # Calculate total physical memory
+        total_memory=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
+
+        if [[ -n "$vm_stat_output" && "$total_memory" -gt 0 ]]; then
+          # Parse memory pages
+          local pages_free pages_active pages_inactive pages_speculative pages_wired
+          pages_free=$(echo "$vm_stat_output" | awk '/Pages free:/ {print $3}' | tr -d '.')
+          pages_active=$(echo "$vm_stat_output" | awk '/Pages active:/ {print $3}' | tr -d '.')
+          pages_inactive=$(echo "$vm_stat_output" | awk '/Pages inactive:/ {print $3}' | tr -d '.')
+          pages_speculative=$(echo "$vm_stat_output" | awk '/Pages speculative:/ {print $3}' | tr -d '.')
+          pages_wired=$(echo "$vm_stat_output" | awk '/Pages wired down:/ {print $4}' | tr -d '.')
+
+          # Calculate used memory using awk for better compatibility
+          used_memory=$(awk -v active="$pages_active" -v wired="$pages_wired" -v inactive="$pages_inactive" -v page_size="$page_size" -v include_cache="$memory_include_buffers_cache" '
+            BEGIN {
+              used = (active + wired) * page_size
+              if (include_cache == "true") {
+                used += inactive * page_size
+              }
+              print int(used)
+            }')
+
+          # Calculate free memory
+          free_memory=$(awk -v free="$pages_free" -v spec="$pages_speculative" -v page_size="$page_size" '
+            BEGIN {
+              print int((free + spec) * page_size)
+            }')
+        else
+          result="unknown"
+          status_code=3
+          status_message="Cannot determine memory usage: unable to get memory statistics"
+        fi
+      else
+        result="unknown"
+        status_code=3
+        status_message="Cannot determine memory usage: required commands not found"
       fi
-    else
+      ;;
+
+    *)
+      # Unsupported OS
       result="unknown"
       status_code=3
-      status_message="Cannot determine memory usage: 'free' command not found"
-    fi
-    ;;
-
-  macos)
-    # macOS-style - using vm_stat
-    if command_exists vm_stat; then
-      # Get page size and memory stats
-      local page_size
-      page_size=$(sysctl -n hw.pagesize)
-
-      local vm_stat_output
-      vm_stat_output=$(vm_stat)
-
-      # Calculate total physical memory
-      total_memory=$(sysctl -n hw.memsize)
-
-      # Parse memory pages
-      local pages_free
-      pages_free=$(echo "$vm_stat_output" | awk '/Pages free:/ {print $3}' | tr -d '.')
-
-      local pages_active
-      pages_active=$(echo "$vm_stat_output" | awk '/Pages active:/ {print $3}' | tr -d '.')
-
-      local pages_inactive
-      pages_inactive=$(echo "$vm_stat_output" | awk '/Pages inactive:/ {print $3}' | tr -d '.')
-
-      local pages_speculative
-      pages_speculative=$(echo "$vm_stat_output" | awk '/Pages speculative:/ {print $3}' | tr -d '.')
-
-      local pages_wired
-      pages_wired=$(echo "$vm_stat_output" | awk '/Pages wired down:/ {print $4}' | tr -d '.')
-
-      # Calculate used memory - use bc for floating point arithmetic
-      # Convert page values to integers first to avoid issues with bash arithmetic
-      local active_memory
-      local wired_memory
-      active_memory=$(echo "$pages_active * $page_size" | bc)
-      wired_memory=$(echo "$pages_wired * $page_size" | bc)
-      used_memory=$(echo "$active_memory + $wired_memory" | bc)
-
-      # If we include inactive memory in used count
-      if [ "$memory_include_buffers_cache" = "true" ]; then
-        local inactive_memory
-        inactive_memory=$(echo "$pages_inactive * $page_size" | bc)
-        used_memory=$(echo "$used_memory + $inactive_memory" | bc)
-      fi
-
-      # Calculate free memory
-      local free_pages_memory
-      local speculative_memory
-      free_pages_memory=$(echo "$pages_free * $page_size" | bc)
-      speculative_memory=$(echo "$pages_speculative * $page_size" | bc)
-      free_memory=$(echo "$free_pages_memory + $speculative_memory" | bc)
-
-      # Get swap information if needed
-      if [ "$memory_include_swap" = "true" ]; then
-        local swap_info
-        swap_info=$(sysctl -n vm.swapusage)
-
-        # Parse swap total and used
-        swap_total=$(echo "$swap_info" | awk -F'[M ]' '{print $3}')
-        swap_total=$(echo "$swap_total * 1024 * 1024" | bc) # Convert MB to bytes
-
-        swap_used=$(echo "$swap_info" | awk -F'[M ]' '{print $6}')
-        swap_used=$(echo "$swap_used * 1024 * 1024" | bc) # Convert MB to bytes
-      fi
-    else
-      result="unknown"
-      status_code=3
-      status_message="Cannot determine memory usage: 'vm_stat' command not found"
-    fi
-    ;;
-
-  *)
-    # Unsupported OS
-    result="unknown"
-    status_code=3
-    status_message="Unsupported OS type: $os_type"
-    ;;
-  esac
+      status_message="Unsupported OS type: $os_type"
+      ;;
+    esac
+  fi
 
   # Calculate memory usage percentage if we have values
-  if [ "$total_memory" -gt 0 ] && [ "$used_memory" -ge 0 ]; then
-    # Calculate the percentage
-    result=$(echo "scale=1; $used_memory * 100 / $total_memory" | bc)
+  if [[ "$total_memory" -gt 0 && "$used_memory" -ge 0 ]]; then
+    # Calculate the percentage using awk for better compatibility
+    result=$(awk -v used="$used_memory" -v total="$total_memory" 'BEGIN {printf "%.1f", used * 100 / total}')
 
-    # Check thresholds
-    if (($(echo "$result >= $memory_threshold" | bc -l))); then
+    # Check thresholds using awk for comparison
+    local threshold_check warning_check
+    threshold_check=$(awk -v result="$result" -v threshold="$memory_threshold" 'BEGIN {print (result >= threshold) ? 1 : 0}')
+    warning_check=$(awk -v result="$result" -v threshold="$memory_warning_threshold" 'BEGIN {print (result >= threshold) ? 1 : 0}')
+
+    if [[ "$threshold_check" -eq 1 ]]; then
       status_code=2
       status_message="CRITICAL: Memory usage is ${result}%, threshold: ${memory_threshold}%"
-    elif (($(echo "$result >= $memory_warning_threshold" | bc -l))); then
+    elif [[ "$warning_check" -eq 1 ]]; then
       status_code=1
       status_message="WARNING: Memory usage is ${result}%, threshold: ${memory_warning_threshold}%"
     else
