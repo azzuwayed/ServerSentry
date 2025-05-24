@@ -54,9 +54,9 @@ tui_system_info() {
 
   # Disk Info
   system_info+="Disk Usage:\n"
-  df -h | head -10 | while read -r line; do
+  while read -r line; do
     system_info+="  $line\n"
-  done
+  done < <(df -h | head -10)
 
   # CPU Info
   if [[ -f /proc/cpuinfo ]]; then
@@ -72,7 +72,7 @@ tui_system_info() {
   # Load Average
   if [[ -f /proc/loadavg ]]; then
     local load_avg
-    load_avg=$(cat /proc/loadavg | cut -d' ' -f1-3)
+    load_avg=$(cut -d' ' -f1-3 /proc/loadavg)
     system_info+="Load Average: $load_avg\n"
   elif util_command_exists uptime; then
     local load_avg

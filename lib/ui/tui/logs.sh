@@ -13,7 +13,7 @@ tui_logs() {
     echo -e "\n--- Recent Logs ---"
     tail -n 50 "$logfile" 2>/dev/null || echo "No log file found."
     echo -e "-------------------\n"
-    read -p "Press Enter to continue..."
+    read -r -p "Press Enter to continue..."
   fi
 }
 

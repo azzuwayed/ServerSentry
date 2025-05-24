@@ -13,6 +13,6 @@ tui_show_message() {
     whiptail --msgbox "$msg" "$height" "$width"
   else
     echo -e "$msg"
-    read -p "Press Enter to continue..."
+    read -r -p "Press Enter to continue..."
   fi
 }

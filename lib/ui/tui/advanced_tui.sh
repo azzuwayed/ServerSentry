@@ -15,9 +15,21 @@ if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
   source "$BASE_DIR/lib/ui/cli/colors.sh"
 fi
 
+# Define TUI color variables if not already defined
+if [[ -z "${TUI_BOLD:-}" ]]; then
+  TUI_BOLD='\033[1m'
+  TUI_CYAN='\033[0;36m'
+  TUI_GREEN='\033[0;32m'
+  TUI_RED='\033[0;31m'
+  TUI_YELLOW='\033[1;33m'
+  TUI_DIM='\033[2m'
+  TUI_NC='\033[0m'
+fi
+
 # TUI Configuration
 TUI_REFRESH_RATE=2
 TUI_LOG_FILE="${BASE_DIR}/logs/tui.log"
+# shellcheck disable=SC2034
 TUI_STATE_FILE="${BASE_DIR}/logs/tui.state"
 
 # Initialize advanced TUI system
@@ -35,7 +47,10 @@ init_advanced_tui() {
     TUI_LINES=$(tput lines 2>/dev/null || echo "24")
   else
     # Fallback for terminals without tput
-    TUI_HOME="" TUI_CLEAR="clear" TUI_SAVE_CURSOR="" TUI_RESTORE_CURSOR=""
+    TUI_HOME="" TUI_CLEAR="clear"
+    # shellcheck disable=SC2034
+    TUI_SAVE_CURSOR="" TUI_RESTORE_CURSOR=""
+    # shellcheck disable=SC2034
     TUI_COLS=80 TUI_LINES=24
   fi
 
@@ -48,7 +63,7 @@ init_advanced_tui() {
   fi
 
   # Clear screen
-  printf "${TUI_CLEAR}"
+  printf "%s" "${TUI_CLEAR}"
 
   log_debug "Initializing advanced TUI system"
 
@@ -115,7 +130,9 @@ start_advanced_tui() {
   get_terminal_size
 
   local current_screen="dashboard"
+  # shellcheck disable=SC2034
   local selected_option=0
+  # shellcheck disable=SC2034
   local auto_refresh=true
 
   while true; do
@@ -158,7 +175,7 @@ start_advanced_tui() {
 # Show main dashboard
 show_dashboard() {
   clear
-  printf "${TUI_HOME}"
+  printf "%s" "${TUI_HOME}"
 
   # Header
   draw_header "ServerSentry v2 - System Dashboard"
@@ -197,26 +214,26 @@ draw_header() {
   local timestamp
   timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 
-  printf "${TUI_BOLD}${TUI_CYAN}"
+  printf "%s%s" "${TUI_BOLD}" "${TUI_CYAN}"
   printf "╔"
   for ((i = 1; i < TERM_WIDTH - 1; i++)); do printf "═"; done
-  printf "╗${TUI_NC}\n"
+  printf "╗%s\n" "${TUI_NC}"
 
-  printf "${TUI_BOLD}${TUI_CYAN}║${TUI_NC} "
-  printf "${TUI_BOLD}$title${TUI_NC}"
+  printf "%s%s║%s " "${TUI_BOLD}" "${TUI_CYAN}" "${TUI_NC}"
+  printf "%s%s%s" "${TUI_BOLD}" "$title" "${TUI_NC}"
 
   # Right-align timestamp
   local title_len=${#title}
   local timestamp_len=${#timestamp}
   local spaces=$((TERM_WIDTH - title_len - timestamp_len - 5))
   for ((i = 0; i < spaces; i++)); do printf " "; done
-  printf "${TUI_DIM}$timestamp${TUI_NC}"
-  printf " ${TUI_BOLD}${TUI_CYAN}║${TUI_NC}\n"
+  printf "%s%s%s" "${TUI_DIM}" "$timestamp" "${TUI_NC}"
+  printf " %s%s║%s\n" "${TUI_BOLD}" "${TUI_CYAN}" "${TUI_NC}"
 
-  printf "${TUI_BOLD}${TUI_CYAN}"
+  printf "%s%s" "${TUI_BOLD}" "${TUI_CYAN}"
   printf "╚"
   for ((i = 1; i < TERM_WIDTH - 1; i++)); do printf "═"; done
-  printf "╝${TUI_NC}\n"
+  printf "╝%s\n" "${TUI_NC}"
 }
 
 # Draw system status panel
@@ -224,21 +241,21 @@ draw_system_status_panel() {
   local plugin_results="$1"
   local width="$2"
 
-  printf "${TUI_BOLD}System Status:${TUI_NC}\n"
+  printf "%sSystem Status:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "├─────────────────┐\n"
 
   # Monitor service status
   if is_monitoring_running; then
-    printf "│ Service: ${TUI_GREEN}●${TUI_NC} Running │\n"
+    printf "│ Service: %s●%s Running │\n" "${TUI_GREEN}" "${TUI_NC}"
   else
-    printf "│ Service: ${TUI_RED}●${TUI_NC} Stopped │\n"
+    printf "│ Service: %s●%s Stopped │\n" "${TUI_RED}" "${TUI_NC}"
   fi
 
   # Plugin status
   if util_command_exists jq && [ -n "$plugin_results" ]; then
     local plugin_count
     plugin_count=$(echo "$plugin_results" | jq '.plugins | length' 2>/dev/null || echo "0")
-    printf "│ Plugins: $plugin_count active │\n"
+    printf "│ Plugins: %s active │\n" "$plugin_count"
 
     # Health summary
     local healthy_count warning_count error_count
@@ -246,7 +263,7 @@ draw_system_status_panel() {
     warning_count=$(echo "$plugin_results" | jq '[.plugins[] | select(.status_code == 1)] | length' 2>/dev/null || echo "0")
     error_count=$(echo "$plugin_results" | jq '[.plugins[] | select(.status_code == 2)] | length' 2>/dev/null || echo "0")
 
-    printf "│ Health: ${TUI_GREEN}$healthy_count${TUI_NC}/${TUI_YELLOW}$warning_count${TUI_NC}/${TUI_RED}$error_count${TUI_NC} │\n"
+    printf "│ Health: %s%s%s/%s%s%s/%s%s%s │\n" "${TUI_GREEN}" "$healthy_count" "${TUI_NC}" "${TUI_YELLOW}" "$warning_count" "${TUI_NC}" "${TUI_RED}" "$error_count" "${TUI_NC}"
   else
     printf "│ Plugins: N/A       │\n"
     printf "│ Health: N/A        │\n"
@@ -260,7 +277,7 @@ draw_resource_usage_panel() {
   local plugin_results="$1"
   local width="$2"
 
-  printf "${TUI_BOLD}Resource Usage:${TUI_NC}\n"
+  printf "%sResource Usage:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "├─────────────────────────────┐\n"
 
   if util_command_exists jq && [ -n "$plugin_results" ]; then
@@ -316,17 +333,18 @@ draw_metric_bar() {
   fi
 
   # Draw bar
-  printf "${color}["
+  printf "%s[" "$color"
   for ((i = 0; i < filled; i++)); do printf "█"; done
   for ((i = 0; i < empty; i++)); do printf " "; done
-  printf "]${TUI_NC} %3d%% │\n" "$value"
+  printf "]%s %3d%% │\n" "${TUI_NC}" "$value"
 }
 
 # Draw activity panel
 draw_activity_panel() {
+  # shellcheck disable=SC2034
   local width="$1"
 
-  printf "${TUI_BOLD}Recent Activity:${TUI_NC}\n"
+  printf "%sRecent Activity:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "├─────────────────────────────────┐\n"
 
   # Show recent log entries
@@ -349,14 +367,14 @@ draw_activity_panel() {
 
 # Draw navigation menu
 draw_navigation_menu() {
-  printf "\n${TUI_BOLD}Navigation:${TUI_NC}\n"
-  printf "${TUI_CYAN}[1]${TUI_NC} Dashboard  "
-  printf "${TUI_CYAN}[2]${TUI_NC} Plugins  "
-  printf "${TUI_CYAN}[3]${TUI_NC} Composite  "
-  printf "${TUI_CYAN}[4]${TUI_NC} Anomaly  "
-  printf "${TUI_CYAN}[5]${TUI_NC} Notifications  "
-  printf "${TUI_CYAN}[6]${TUI_NC} Logs  "
-  printf "${TUI_CYAN}[7]${TUI_NC} Config\n"
+  printf "\n%sNavigation:%s\n" "${TUI_BOLD}" "${TUI_NC}"
+  printf "%s[1]%s Dashboard  " "${TUI_CYAN}" "${TUI_NC}"
+  printf "%s[2]%s Plugins  " "${TUI_CYAN}" "${TUI_NC}"
+  printf "%s[3]%s Composite  " "${TUI_CYAN}" "${TUI_NC}"
+  printf "%s[4]%s Anomaly  " "${TUI_CYAN}" "${TUI_NC}"
+  printf "%s[5]%s Notifications  " "${TUI_CYAN}" "${TUI_NC}"
+  printf "%s[6]%s Logs  " "${TUI_CYAN}" "${TUI_NC}"
+  printf "%s[7]%s Config\n" "${TUI_CYAN}" "${TUI_NC}"
 }
 
 # Draw footer
@@ -364,18 +382,20 @@ draw_footer() {
   local message="$1"
 
   printf "\n"
-  printf "${TUI_DIM}$message${TUI_NC}\n"
+  printf "%s%s%s\n" "${TUI_DIM}" "$message" "${TUI_NC}"
 }
 
 # Handle dashboard input
 handle_dashboard_input() {
   local screen_var="$1"
+  # shellcheck disable=SC2034
+  # shellcheck disable=SC2034
   local option_var="$2"
   local refresh_var="$3"
 
   # Read input with timeout for auto-refresh
   local input
-  if read -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
+  if read -r -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
     case "$input" in
     "1") eval "$screen_var=dashboard" ;;
     "2") eval "$screen_var=plugins" ;;
@@ -405,11 +425,11 @@ handle_dashboard_input() {
 # Show plugin management screen
 show_plugin_screen() {
   clear
-  printf "${TUI_HOME}"
+  printf "%s" "${TUI_HOME}"
 
   draw_header "Plugin Management"
 
-  printf "${TUI_BOLD}Available Plugins:${TUI_NC}\n"
+  printf "%sAvailable Plugins:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "═══════════════════\n"
 
   # List plugins with status
@@ -417,7 +437,8 @@ show_plugin_screen() {
   plugin_results=$(run_all_plugin_checks 2>/dev/null)
 
   if util_command_exists jq && [ -n "$plugin_results" ]; then
-    echo "$plugin_results" | jq -r '.plugins[] | "\(.name)|\(.status_code)|\(.status_message)|\(.metrics.value // "N/A")"' | while IFS='|' read -r name status_code message value; do
+    # Use process substitution to avoid subshell issues
+    while IFS='|' read -r name status_code message value; do
       local status_icon
       case "$status_code" in
       "0") status_icon="${TUI_GREEN}✅${TUI_NC}" ;;
@@ -427,12 +448,12 @@ show_plugin_screen() {
       esac
 
       printf "$status_icon %-12s %-25s %s\n" "$name" "$message" "$value"
-    done
+    done < <(echo "$plugin_results" | jq -r '.plugins[] | "\(.name)|\(.status_code)|\(.status_message)|\(.metrics.value // "N/A")"')
   else
     printf "No plugin data available\n"
   fi
 
-  printf "\n${TUI_BOLD}Plugin Health:${TUI_NC}\n"
+  printf "\n%sPlugin Health:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   if [ -f "$BASE_DIR/lib/core/plugin_health.sh" ]; then
     source "$BASE_DIR/lib/core/plugin_health.sh"
     get_plugin_health_summary 2>/dev/null | head -10
@@ -446,10 +467,11 @@ show_plugin_screen() {
 # Handle plugin screen input
 handle_plugin_input() {
   local screen_var="$1"
+  # shellcheck disable=SC2034
   local option_var="$2"
 
   local input
-  if read -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
+  if read -r -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
     case "$input" in
     "1") eval "$screen_var=dashboard" ;;
     "2") eval "$screen_var=plugins" ;;
@@ -467,11 +489,11 @@ handle_plugin_input() {
 # Show composite checks screen
 show_composite_screen() {
   clear
-  printf "${TUI_HOME}"
+  printf "%s" "${TUI_HOME}"
 
   draw_header "Composite Checks"
 
-  printf "${TUI_BOLD}Active Composite Checks:${TUI_NC}\n"
+  printf "%sActive Composite Checks:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "═══════════════════════════\n"
 
   if [ -f "$BASE_DIR/lib/core/composite.sh" ]; then
@@ -479,14 +501,17 @@ show_composite_screen() {
 
     for config_file in "$COMPOSITE_CONFIG_DIR"/*.conf; do
       if [ -f "$config_file" ]; then
+        # shellcheck disable=SC2154
         if parse_composite_config "$config_file" 2>/dev/null; then
           local status_icon
+          # shellcheck disable=SC2154
           if [ "$enabled" = "true" ]; then
             status_icon="${TUI_GREEN}●${TUI_NC}"
           else
             status_icon="${TUI_RED}●${TUI_NC}"
           fi
 
+          # shellcheck disable=SC2154
           printf "$status_icon %-25s %s\n" "$name" "$rule"
         fi
       fi
@@ -501,10 +526,11 @@ show_composite_screen() {
 # Handle composite screen input
 handle_composite_input() {
   local screen_var="$1"
+  # shellcheck disable=SC2034
   local option_var="$2"
 
   local input
-  if read -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
+  if read -r -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
     case "$input" in
     "1") eval "$screen_var=dashboard" ;;
     "2") eval "$screen_var=plugins" ;;
@@ -522,11 +548,11 @@ handle_composite_input() {
 # Show anomaly detection screen
 show_anomaly_screen() {
   clear
-  printf "${TUI_HOME}"
+  printf "%s" "${TUI_HOME}"
 
   draw_header "Anomaly Detection"
 
-  printf "${TUI_BOLD}Anomaly Detection Status:${TUI_NC}\n"
+  printf "%sAnomaly Detection Status:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "══════════════════════════════\n"
 
   if [ -f "$BASE_DIR/lib/core/anomaly.sh" ]; then
@@ -542,10 +568,11 @@ show_anomaly_screen() {
 # Handle anomaly screen input
 handle_anomaly_input() {
   local screen_var="$1"
+  # shellcheck disable=SC2034
   local option_var="$2"
 
   local input
-  if read -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
+  if read -r -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
     case "$input" in
     "1") eval "$screen_var=dashboard" ;;
     "2") eval "$screen_var=plugins" ;;
@@ -563,24 +590,24 @@ handle_anomaly_input() {
 # Show notification screen
 show_notification_screen() {
   clear
-  printf "${TUI_HOME}"
+  printf "%s" "${TUI_HOME}"
 
   draw_header "Notification System"
 
-  printf "${TUI_BOLD}Notification Providers:${TUI_NC}\n"
+  printf "%sNotification Providers:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "═════════════════════════\n"
 
   # Check notification providers
   local providers=("teams" "slack" "email" "discord" "webhook")
   for provider in "${providers[@]}"; do
     if [ -f "$BASE_DIR/lib/notifications/$provider/$provider.sh" ]; then
-      printf "${TUI_GREEN}●${TUI_NC} %-10s Available\n" "$provider"
+      printf "%s●%s %-10s Available\n" "${TUI_GREEN}" "${TUI_NC}" "$provider"
     else
-      printf "${TUI_RED}●${TUI_NC} %-10s Not installed\n" "$provider"
+      printf "%s●%s %-10s Not installed\n" "${TUI_RED}" "${TUI_NC}" "$provider"
     fi
   done
 
-  printf "\n${TUI_BOLD}Recent Notifications:${TUI_NC}\n"
+  printf "\n%sRecent Notifications:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "═══════════════════════\n"
 
   # Show recent notification logs if available
@@ -600,10 +627,11 @@ show_notification_screen() {
 # Handle notification screen input
 handle_notification_input() {
   local screen_var="$1"
+  # shellcheck disable=SC2034
   local option_var="$2"
 
   local input
-  if read -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
+  if read -r -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
     case "$input" in
     "1") eval "$screen_var=dashboard" ;;
     "2") eval "$screen_var=plugins" ;;
@@ -621,11 +649,11 @@ handle_notification_input() {
 # Show log screen
 show_log_screen() {
   clear
-  printf "${TUI_HOME}"
+  printf "%s" "${TUI_HOME}"
 
   draw_header "System Logs"
 
-  printf "${TUI_BOLD}Recent Log Entries:${TUI_NC}\n"
+  printf "%sRecent Log Entries:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "════════════════════\n"
 
   if [ -f "$LOG_FILE" ]; then
@@ -642,10 +670,11 @@ show_log_screen() {
 # Handle log screen input
 handle_log_input() {
   local screen_var="$1"
+  # shellcheck disable=SC2034
   local option_var="$2"
 
   local input
-  if read -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
+  if read -r -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
     case "$input" in
     "1") eval "$screen_var=dashboard" ;;
     "2") eval "$screen_var=plugins" ;;
@@ -663,15 +692,15 @@ handle_log_input() {
 # Show configuration screen
 show_config_screen() {
   clear
-  printf "${TUI_HOME}"
+  printf "%s" "${TUI_HOME}"
 
   draw_header "Configuration"
 
-  printf "${TUI_BOLD}Current Configuration:${TUI_NC}\n"
+  printf "%sCurrent Configuration:%s\n" "${TUI_BOLD}" "${TUI_NC}"
   printf "═══════════════════════\n"
 
   if [ -f "$MAIN_CONFIG" ]; then
-    cat "$MAIN_CONFIG" | head -n $((TERM_HEIGHT - 10))
+    head -n $((TERM_HEIGHT - 10)) "$MAIN_CONFIG"
   else
     printf "Configuration file not found\n"
   fi
@@ -682,10 +711,12 @@ show_config_screen() {
 # Handle config screen input
 handle_config_input() {
   local screen_var="$1"
+  # shellcheck disable=SC2034
+  # shellcheck disable=SC2034
   local option_var="$2"
 
   local input
-  if read -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
+  if read -r -t $TUI_REFRESH_RATE -n 1 input 2>/dev/null; then
     case "$input" in
     "1") eval "$screen_var=dashboard" ;;
     "2") eval "$screen_var=plugins" ;;

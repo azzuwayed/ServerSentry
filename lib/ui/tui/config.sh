@@ -46,7 +46,7 @@ tui_configure() {
     fi
   else
     echo "Current configuration file: $MAIN_CONFIG"
-    read -p "Do you want to edit it? [y/N]: " edit_choice
+    read -r -p "Do you want to edit it? [y/N]: " edit_choice
     if [[ "$edit_choice" =~ ^[Yy] ]]; then
       ${EDITOR:-vi} "$MAIN_CONFIG"
     fi

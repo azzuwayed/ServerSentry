@@ -99,7 +99,7 @@ else
         echo "7) Notification Management"
         echo "8) System Info"
         echo "9) Show Current Configuration"
-        read -p "Select an action [1-9]: " choice
+        read -r -p "Select an action [1-9]: " choice
       fi
 
       case "$choice" in

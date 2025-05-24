@@ -13,6 +13,7 @@ tui_plugin_management() {
     local plugins_config
     plugins_config=$(yq e '.plugins' "$BASE_DIR/config/serversentry.yaml" 2>/dev/null)
   else
+    # shellcheck disable=SC2034
     plugins_config="yq command not available"
   fi
 
@@ -44,7 +45,7 @@ tui_plugin_management() {
     echo "4) Configure Plugin"
     echo "5) Test Plugin"
     echo "6) Return to Main Menu"
-    read -p "Select an action [1-6]: " choice
+    read -r -p "Select an action [1-6]: " choice
   fi
 
   case "$choice" in
@@ -82,7 +83,7 @@ tui_enable_plugin() {
   elif [ "$TUI_TOOL" = "whiptail" ]; then
     plugin_name=$(whiptail --inputbox "Enter plugin name to enable:" 8 40 3>&1 1>&2 2>&3)
   else
-    read -p "Enter plugin name to enable: " plugin_name
+    read -r -p "Enter plugin name to enable: " plugin_name
   fi
 
   if [ -n "$plugin_name" ]; then
@@ -99,7 +100,7 @@ tui_disable_plugin() {
   elif [ "$TUI_TOOL" = "whiptail" ]; then
     plugin_name=$(whiptail --inputbox "Enter plugin name to disable:" 8 40 3>&1 1>&2 2>&3)
   else
-    read -p "Enter plugin name to disable: " plugin_name
+    read -r -p "Enter plugin name to disable: " plugin_name
   fi
 
   if [ -n "$plugin_name" ]; then
@@ -116,7 +117,7 @@ tui_configure_plugin() {
   elif [ "$TUI_TOOL" = "whiptail" ]; then
     plugin_name=$(whiptail --inputbox "Enter plugin name to configure:" 8 40 3>&1 1>&2 2>&3)
   else
-    read -p "Enter plugin name to configure: " plugin_name
+    read -r -p "Enter plugin name to configure: " plugin_name
   fi
 
   if [ -n "$plugin_name" ]; then
@@ -146,7 +147,7 @@ tui_test_plugin() {
   elif [ "$TUI_TOOL" = "whiptail" ]; then
     plugin_name=$(whiptail --inputbox "Enter plugin name to test (leave empty for all):" 8 50 3>&1 1>&2 2>&3)
   else
-    read -p "Enter plugin name to test (leave empty for all): " plugin_name
+    read -r -p "Enter plugin name to test (leave empty for all): " plugin_name
   fi
 
   local test_result

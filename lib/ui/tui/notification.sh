@@ -59,7 +59,7 @@ tui_notification_management() {
     done
     echo "$((${#all_providers[@]} + 1))) Edit provider config"
     echo "$((${#all_providers[@]} + 2))) Return to main menu"
-    read -p "Select a provider to toggle/edit [1-$((${#all_providers[@]} + 2))]: " idx
+    read -r -p "Select a provider to toggle/edit [1-$((${#all_providers[@]} + 2))]: " idx
     if [ "$idx" -gt 0 ] && [ "$idx" -le "${#all_providers[@]}" ]; then
       choice="${all_providers[$((idx - 1))]}"
     elif [ "$idx" = "$((${#all_providers[@]} + 1))" ]; then
@@ -90,7 +90,7 @@ tui_notification_management() {
     # Basic validation: check file is not empty
     if [ ! -s "$provider_conf" ]; then
       echo "Warning: $provider_conf is empty!"
-      read -p "Press Enter to continue..."
+      read -r -p "Press Enter to continue..."
     fi
     # Validate YAML after edit (main config)
     if util_command_exists yq; then
@@ -120,7 +120,7 @@ tui_notification_management() {
     else
       echo "1) Enable/Disable Provider"
       echo "2) Send Test Notification"
-      read -p "Select action [1-2]: " action_idx
+      read -r -p "Select action [1-2]: " action_idx
       if [ "$action_idx" = "1" ]; then
         action="toggle"
       elif [ "$action_idx" = "2" ]; then
@@ -144,7 +144,8 @@ tui_notification_management() {
         new_enabled+=("$choice")
       fi
       # Write new enabled providers list to config in YAML array format
-      local new_line="notification_channels: [$(
+      local new_line
+      new_line="notification_channels: [$(
         IFS=,
         echo \""${new_enabled[*]}"\"
       )]"
@@ -168,6 +169,7 @@ tui_notification_management() {
         return
       fi
       # Source the provider script and call its send function
+      # shellcheck disable=SC1090
       source "$provider_script"
       local result
       if declare -f "${choice}"_provider_send >/dev/null; then
