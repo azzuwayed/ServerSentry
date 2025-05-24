@@ -112,17 +112,37 @@ create_metric_bar() {
   local label="$3"
   local width="${4:-20}"
 
-  local filled=$((value * width / 100))
+  # Handle floating point values
+  local value_int
+  if command -v bc >/dev/null 2>&1; then
+    value_int=$(echo "$value / 1" | bc)
+  else
+    # Fallback: convert float to int by removing decimal
+    value_int=${value%.*}
+  fi
+
+  local filled=$((value_int * width / 100))
   local empty=$((width - filled))
 
   # Determine color based on threshold
   local color
-  if [ "$value" -ge "$threshold" ]; then
-    color="$RED"
-  elif [ "$value" -ge $((threshold - 20)) ]; then
-    color="$YELLOW"
+  if command -v bc >/dev/null 2>&1; then
+    if [[ $(echo "$value >= $threshold" | bc) -eq 1 ]]; then
+      color="$RED"
+    elif [[ $(echo "$value >= $threshold - 20" | bc) -eq 1 ]]; then
+      color="$YELLOW"
+    else
+      color="$GREEN"
+    fi
   else
-    color="$GREEN"
+    # Fallback comparison for systems without bc
+    if [[ $value_int -ge $threshold ]]; then
+      color="$RED"
+    elif [[ $value_int -ge $((threshold - 20)) ]]; then
+      color="$YELLOW"
+    else
+      color="$GREEN"
+    fi
   fi
 
   local bar=""

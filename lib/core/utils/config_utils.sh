@@ -89,6 +89,10 @@ util_config_get_value() {
   local var_key
   var_key=$(echo "$key" | tr '.' '_')
   local var_name="${namespace}_${var_key}"
+
+  # Trim any whitespace from variable name
+  var_name=$(echo "$var_name" | tr -d '[:space:]')
+
   local value="${!var_name:-}"
 
   if [[ -n "$value" ]]; then
@@ -96,6 +100,38 @@ util_config_get_value() {
   else
     echo "$default_value"
   fi
+}
+
+# Function: util_config_get_array
+# Description: Get array values from configuration
+# Parameters:
+#   $1 - key name (supports dot notation, without array index)
+#   $2 - namespace (optional, defaults to config)
+# Returns:
+#   Array values separated by newlines via stdout
+util_config_get_array() {
+  local key="$1"
+  local namespace="${2:-config}"
+
+  # Look for array elements starting from index 0
+  local index=0
+  local found_values=()
+
+  while true; do
+    local array_key="${key}.${index}"
+    local value
+    value=$(util_config_get_value "$array_key" "" "$namespace")
+
+    if [[ -n "$value" ]]; then
+      found_values+=("$value")
+      ((index++))
+    else
+      break
+    fi
+  done
+
+  # Return array values, one per line
+  printf '%s\n' "${found_values[@]}"
 }
 
 # Function: util_config_set_value
@@ -116,10 +152,17 @@ util_config_set_value() {
   var_key=$(echo "$key" | tr '.' '_')
   local var_name="${namespace}_${var_key}"
 
+  # Trim any whitespace from variable name
+  var_name=$(echo "$var_name" | tr -d '[:space:]')
+
   # Sanitize the value
   value=$(util_sanitize_input "$value")
 
-  eval "${var_name}='${value}'"
+  # Trim leading and trailing whitespace from value
+  value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+  # Use printf to properly escape the value for assignment
+  printf -v "$var_name" '%s' "$value"
   log_debug "Set config value: $var_name = $value"
 
   return 0
@@ -157,7 +200,19 @@ util_config_validate_values() {
 
       case "$type" in
       required)
-        if ! util_require_param "$value" "$key"; then
+        # Special handling for array parameters
+        if [[ "$key" =~ \.enabled$ ]] && [[ -z "$value" ]]; then
+          # Check if it's an array by looking for the .0 version
+          local array_key="${key}.0"
+          local array_value
+          array_value=$(util_config_get_value "$array_key" "" "$namespace")
+          if [[ -n "$array_value" ]]; then
+            log_debug "Found array value for ${key}: ${array_value}"
+            # Array exists, validation passes
+          elif ! util_require_param "$value" "$key"; then
+            validation_failed=true
+          fi
+        elif ! util_require_param "$value" "$key"; then
           validation_failed=true
         fi
         ;;
@@ -427,6 +482,7 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f util_config_parse_yaml
   export -f util_config_get_cached
   export -f util_config_get_value
+  export -f util_config_get_array
   export -f util_config_set_value
   export -f util_config_validate_values
   export -f util_config_load_env_overrides

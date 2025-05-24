@@ -24,7 +24,9 @@ if [[ ${BASH_VERSION%%.*} -ge 4 ]]; then
 else
   # Fallback for older bash versions
   ASSOCIATIVE_ARRAYS_SUPPORTED=false
-  log_warning "Associative arrays not supported in bash version $BASH_VERSION, using fallback methods"
+  if [[ "${CURRENT_LOG_LEVEL:-1}" -le 2 ]]; then
+    log_warning "Associative arrays not supported in bash version $BASH_VERSION, using fallback methods"
+  fi
 fi
 
 # Array to store registered plugins
@@ -137,21 +139,21 @@ _plugin_get_metadata() {
 #   0 - success
 #   1 - failure
 plugin_system_init() {
-  log_debug "Initializing plugin system"
+  log_debug "Initializing plugin system" "plugins"
 
   # Validate and create plugin directories
   if ! util_validate_dir_exists "$PLUGIN_DIR" "Plugin directory"; then
-    log_info "Creating plugin directory: $PLUGIN_DIR"
+    log_info "Creating plugin directory: $PLUGIN_DIR" "plugins"
     if ! create_secure_dir "$PLUGIN_DIR" 755; then
-      log_error "Failed to create plugin directory: $PLUGIN_DIR"
+      log_error "Failed to create plugin directory: $PLUGIN_DIR" "plugins"
       return 1
     fi
   fi
 
   if ! util_validate_dir_exists "$PLUGIN_CONFIG_DIR" "Plugin config directory"; then
-    log_info "Creating plugin config directory: $PLUGIN_CONFIG_DIR"
+    log_info "Creating plugin config directory: $PLUGIN_CONFIG_DIR" "plugins"
     if ! create_secure_dir "$PLUGIN_CONFIG_DIR" 755; then
-      log_error "Failed to create plugin config directory: $PLUGIN_CONFIG_DIR"
+      log_error "Failed to create plugin config directory: $PLUGIN_CONFIG_DIR" "plugins"
       return 1
     fi
   fi
@@ -177,19 +179,21 @@ plugin_system_init() {
 
   # Load enabled plugins from configuration
   local enabled_plugins
-  enabled_plugins=$(config_get_value "plugins.enabled" "cpu")
+  enabled_plugins=$(config_get_array "plugins.enabled")
 
-  # Convert comma/space/brackets separated string to array
-  local plugin_list
-  plugin_list=$(echo "$enabled_plugins" | tr -d '[]' | tr ',' ' ')
+  # If no plugins found in array format, fallback to single value
+  if [[ -z "$enabled_plugins" ]]; then
+    enabled_plugins=$(config_get_value "plugins.enabled" "cpu")
+  fi
 
-  log_info "Loading plugins: $plugin_list"
+  log_debug "Loading plugins: $(echo "$enabled_plugins" | tr '\n' ',' | sed 's/,$//')" "plugins"
 
   # Load each plugin with error handling and performance tracking
   local loaded_count=0
-  for plugin_name in $plugin_list; do
+  while IFS= read -r plugin_name; do
+    [[ -z "$plugin_name" ]] && continue
     plugin_name=$(util_sanitize_input "$plugin_name")
-    log_debug "Loading plugin: $plugin_name"
+    log_debug "Loading plugin: $plugin_name" "plugins"
 
     local start_time
     start_time=$(date +%s.%N 2>/dev/null || date +%s)
@@ -202,10 +206,10 @@ plugin_system_init() {
       end_time=$(date +%s.%N 2>/dev/null || date +%s)
       plugin_performance_track "$plugin_name" "load"
     else
-      log_error "Failed to load plugin: $plugin_name"
+      log_error "Failed to load plugin: $plugin_name" "plugins"
       plugin_performance_track "$plugin_name" "error"
     fi
-  done
+  done <<<"$enabled_plugins"
 
   # Save updated registry
   plugin_registry_save
@@ -213,7 +217,7 @@ plugin_system_init() {
   # Optimize loading order for next time
   plugin_optimize_loading
 
-  log_info "Plugin system initialized: loaded $loaded_count plugins"
+  log_debug "Plugin system initialized: loaded $loaded_count plugins" "plugins"
   return 0
 }
 
@@ -303,7 +307,7 @@ plugin_load() {
   plugin_info=$("${plugin_name}_plugin_info" 2>/dev/null || echo "No description available")
   _plugin_set_metadata "$plugin_name" "$plugin_info"
 
-  log_info "Plugin loaded successfully: $plugin_name"
+  log_debug "Plugin loaded successfully: $plugin_name"
   return 0
 }
 
@@ -367,7 +371,7 @@ plugin_register() {
   plugin_info=$("${plugin_name}_plugin_info" 2>/dev/null || echo "No description available")
   _plugin_set_metadata "$plugin_name" "$plugin_info"
 
-  log_info "Plugin registered: $plugin_name - $plugin_info"
+  log_debug "Plugin registered: $plugin_name - $plugin_info"
   return 0
 }
 
@@ -722,12 +726,12 @@ plugin_performance_track() {
 
     # Log performance if duration provided
     if [[ "$duration" != "0" ]]; then
-      echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Plugin:$plugin_name Operation:$operation Duration:${duration}s" >>"$PLUGIN_PERFORMANCE_LOG"
+      log_performance "Plugin check completed" "plugin=$plugin_name duration=${duration}s"
     fi
     ;;
   "error")
     PLUGIN_ERROR_COUNTS[$plugin_name]="$((${PLUGIN_ERROR_COUNTS[$plugin_name]:-0} + 1))"
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Plugin:$plugin_name Operation:error Count:${PLUGIN_ERROR_COUNTS[$plugin_name]}" >>"$PLUGIN_PERFORMANCE_LOG"
+    log_error "Plugin operation failed" "plugins" # Use plugin component logging
     ;;
   esac
 

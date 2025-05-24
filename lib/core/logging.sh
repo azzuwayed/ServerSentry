@@ -14,23 +14,55 @@ export LOGGING_MODULE_LOADED
 # Logging configuration
 LOG_DIR="${BASE_DIR}/logs"
 LOG_FILE="${LOG_DIR}/serversentry.log"
+
+# Log level constants
 LOG_LEVEL_DEBUG=0
 LOG_LEVEL_INFO=1
 LOG_LEVEL_WARNING=2
 LOG_LEVEL_ERROR=3
 LOG_LEVEL_CRITICAL=4
 
-# Default log level
-CURRENT_LOG_LEVEL=$LOG_LEVEL_INFO
+# Default log level (preserve early setting if available)
+CURRENT_LOG_LEVEL=${CURRENT_LOG_LEVEL:-$LOG_LEVEL_INFO}
 export CURRENT_LOG_LEVEL
 
+# Specialized log files
+PERFORMANCE_LOG="${LOG_DIR}/performance.log"
+ERROR_LOG="${LOG_DIR}/error.log"
+AUDIT_LOG="${LOG_DIR}/audit.log"
+SECURITY_LOG="${LOG_DIR}/security.log"
+
+# Component log levels (can be overridden by config)
+if [[ ${BASH_VERSION%%.*} -ge 4 ]]; then
+  # Modern bash with associative array support
+  declare -A COMPONENT_LOG_LEVELS=(
+    ["core"]=$LOG_LEVEL_INFO
+    ["plugins"]=$LOG_LEVEL_INFO
+    ["notifications"]=$LOG_LEVEL_INFO
+    ["config"]=$LOG_LEVEL_WARNING
+    ["utils"]=$LOG_LEVEL_WARNING
+    ["ui"]=$LOG_LEVEL_INFO
+    ["performance"]=$LOG_LEVEL_DEBUG
+    ["security"]=$LOG_LEVEL_WARNING
+  )
+  COMPONENT_LOGGING_SUPPORTED=true
+else
+  # Fallback for older bash versions
+  COMPONENT_LOGGING_SUPPORTED=false
+fi
+
+# Log format settings
+LOG_FORMAT="${LOG_FORMAT:-standard}"
+LOG_TIMESTAMP_FORMAT="${LOG_TIMESTAMP_FORMAT:-%Y-%m-%d %H:%M:%S}"
+LOG_INCLUDE_CALLER="${LOG_INCLUDE_CALLER:-false}"
+
 # New standardized function: logging_init
-# Description: Initialize logging system with proper validation and directory setup
+# Description: Initialize logging system with comprehensive configuration support
 # Returns:
 #   0 - success
 #   1 - failure
 logging_init() {
-  # Create log directory with secure permissions
+  # Create main log directory with secure permissions
   if [[ ! -d "$LOG_DIR" ]]; then
     if ! mkdir -p "$LOG_DIR"; then
       echo "Failed to create log directory: $LOG_DIR" >&2
@@ -39,22 +71,125 @@ logging_init() {
     chmod 755 "$LOG_DIR"
   fi
 
-  # Create log file with secure permissions
-  if [[ ! -f "$LOG_FILE" ]]; then
-    if ! touch "$LOG_FILE"; then
-      echo "Failed to create log file: $LOG_FILE" >&2
+  # Create archive directory
+  local archive_dir="${LOG_DIR}/archive"
+  if [[ ! -d "$archive_dir" ]]; then
+    mkdir -p "$archive_dir" 2>/dev/null
+    chmod 755 "$archive_dir" 2>/dev/null
+  fi
+
+  # Initialize main log file
+  if ! _init_log_file "$LOG_FILE"; then
+    return 1
+  fi
+
+  # Load logging configuration from config if available
+  if declare -f config_get_value >/dev/null 2>&1; then
+    _load_logging_config
+  fi
+
+  # Initialize specialized log files if enabled
+  _init_specialized_logs
+
+  # Log system initialization (only if not in quiet mode)
+  if [[ "${CURRENT_LOG_LEVEL:-1}" -le $LOG_LEVEL_DEBUG ]]; then
+    log_debug "Logging system initialized with comprehensive configuration"
+    log_debug "Main log: $LOG_FILE"
+    log_debug "Log level: $(logging_get_level)"
+    log_debug "Format: $LOG_FORMAT"
+  fi
+
+  return 0
+}
+
+# Internal function: Initialize a log file with proper permissions
+_init_log_file() {
+  local log_file="$1"
+  local permissions="${2:-644}"
+
+  if [[ ! -f "$log_file" ]]; then
+    if ! touch "$log_file"; then
+      echo "Failed to create log file: $log_file" >&2
       return 1
     fi
-    chmod 644 "$LOG_FILE"
   fi
-
-  # Set log level from configuration if available
-  if [[ -n "${config_log_level:-}" ]]; then
-    logging_set_level "${config_log_level}"
-  fi
-
-  log_debug "Logging system initialized"
+  chmod "$permissions" "$log_file" 2>/dev/null
   return 0
+}
+
+# Internal function: Load logging configuration from config
+_load_logging_config() {
+  # Load global log settings
+  local config_level
+  config_level=$(config_get_value "logging.global.default_level" "info")
+  if [[ -n "$config_level" ]]; then
+    logging_set_level "$config_level"
+  fi
+
+  # Load format settings
+  LOG_FORMAT=$(config_get_value "logging.global.output_format" "standard")
+  LOG_TIMESTAMP_FORMAT=$(config_get_value "logging.global.timestamp_format" "%Y-%m-%d %H:%M:%S")
+  LOG_INCLUDE_CALLER=$(config_get_value "logging.global.include_caller" "false")
+
+  # Load component-specific log levels
+  local components=("core" "plugins" "notifications" "config" "utils" "ui" "performance" "security")
+  for component in "${components[@]}"; do
+    local level
+    level=$(config_get_value "logging.components.$component" "")
+    if [[ -n "$level" && "$COMPONENT_LOGGING_SUPPORTED" == "true" ]]; then
+      case "$level" in
+      debug) COMPONENT_LOG_LEVELS["$component"]=$LOG_LEVEL_DEBUG ;;
+      info) COMPONENT_LOG_LEVELS["$component"]=$LOG_LEVEL_INFO ;;
+      warning) COMPONENT_LOG_LEVELS["$component"]=$LOG_LEVEL_WARNING ;;
+      error) COMPONENT_LOG_LEVELS["$component"]=$LOG_LEVEL_ERROR ;;
+      critical) COMPONENT_LOG_LEVELS["$component"]=$LOG_LEVEL_CRITICAL ;;
+      esac
+    fi
+  done
+
+  # Update specialized log file paths from config
+  PERFORMANCE_LOG=$(config_get_value "logging.specialized.performance.file" "$PERFORMANCE_LOG")
+  ERROR_LOG=$(config_get_value "logging.specialized.error.file" "$ERROR_LOG")
+  AUDIT_LOG=$(config_get_value "logging.specialized.audit.file" "$AUDIT_LOG")
+  SECURITY_LOG=$(config_get_value "logging.specialized.security.file" "$SECURITY_LOG")
+
+  # Make paths absolute if they're relative
+  [[ "$PERFORMANCE_LOG" != /* ]] && PERFORMANCE_LOG="${BASE_DIR}/$PERFORMANCE_LOG"
+  [[ "$ERROR_LOG" != /* ]] && ERROR_LOG="${BASE_DIR}/$ERROR_LOG"
+  [[ "$AUDIT_LOG" != /* ]] && AUDIT_LOG="${BASE_DIR}/$AUDIT_LOG"
+  [[ "$SECURITY_LOG" != /* ]] && SECURITY_LOG="${BASE_DIR}/$SECURITY_LOG"
+}
+
+# Internal function: Initialize specialized log files
+_init_specialized_logs() {
+  # Check if specialized logging is enabled
+  if declare -f config_get_value >/dev/null 2>&1; then
+    # Performance log
+    if [[ "$(config_get_value "logging.specialized.performance.enabled" "true")" == "true" ]]; then
+      _init_log_file "$PERFORMANCE_LOG"
+    fi
+
+    # Error log
+    if [[ "$(config_get_value "logging.specialized.error.enabled" "true")" == "true" ]]; then
+      _init_log_file "$ERROR_LOG"
+    fi
+
+    # Audit log
+    if [[ "$(config_get_value "logging.specialized.audit.enabled" "true")" == "true" ]]; then
+      _init_log_file "$AUDIT_LOG"
+    fi
+
+    # Security log
+    if [[ "$(config_get_value "logging.specialized.security.enabled" "true")" == "true" ]]; then
+      _init_log_file "$SECURITY_LOG"
+    fi
+  else
+    # Fallback: create all specialized logs
+    _init_log_file "$PERFORMANCE_LOG"
+    _init_log_file "$ERROR_LOG"
+    _init_log_file "$AUDIT_LOG"
+    _init_log_file "$SECURITY_LOG"
+  fi
 }
 
 # New standardized function: logging_set_level
@@ -137,11 +272,8 @@ logging_rotate() {
   # Create archive directory with secure permissions
   local archive_dir="${LOG_DIR}/archive"
   if [[ ! -d "$archive_dir" ]]; then
-    if ! mkdir -p "$archive_dir"; then
-      log_error "Failed to create archive directory: $archive_dir"
-      return 1
-    fi
-    chmod 755 "$archive_dir"
+    log_error "Archive directory does not exist: $archive_dir"
+    return 1
   fi
 
   # Check if log file exists and has content
@@ -230,60 +362,189 @@ logging_cleanup_archives() {
   return 0
 }
 
-# Enhanced internal log function with better error handling
+# Enhanced internal log function with format support and specialized routing
 _log() {
   local level="$1"
   local level_name="$2"
   local message="$3"
+  local component="${4:-core}"
+  local log_file="${5:-$LOG_FILE}"
 
   # Validate parameters
   if [[ -z "$message" ]]; then
     return 1
   fi
 
+  # Check component-specific log level if available
+  local effective_level="$CURRENT_LOG_LEVEL"
+  if [[ "$COMPONENT_LOGGING_SUPPORTED" == "true" && -n "${COMPONENT_LOG_LEVELS[$component]:-}" ]]; then
+    effective_level="${COMPONENT_LOG_LEVELS[$component]}"
+  fi
+
   # Check if level is enabled
-  if [[ "$level" -ge "$CURRENT_LOG_LEVEL" ]]; then
+  if [[ "$level" -ge "$effective_level" ]]; then
     local timestamp
-    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-    local log_entry="[$timestamp] [$level_name] $message"
+    timestamp=$(date +"$LOG_TIMESTAMP_FORMAT")
+
+    local log_entry
+    case "$LOG_FORMAT" in
+    json)
+      log_entry=$(printf '{"timestamp":"%s","level":"%s","component":"%s","message":"%s"}' \
+        "$timestamp" "$level_name" "$component" "$(echo "$message" | sed 's/"/\\"/g')")
+      ;;
+    structured)
+      log_entry="timestamp=\"$timestamp\" level=\"$level_name\" component=\"$component\" message=\"$message\""
+      ;;
+    *)
+      # Standard format
+      if [[ "$LOG_INCLUDE_CALLER" == "true" ]]; then
+        local caller_info=" [${FUNCNAME[3]:-main}:${BASH_LINENO[2]:-0}]"
+        log_entry="[$timestamp] [$level_name] [$component]$caller_info $message"
+      else
+        log_entry="[$timestamp] [$level_name] [$component] $message"
+      fi
+      ;;
+    esac
 
     # Write to log file with error handling
-    if [[ -w "$LOG_FILE" ]]; then
-      echo "$log_entry" >>"$LOG_FILE" 2>/dev/null
+    if [[ -w "$log_file" ]]; then
+      echo "$log_entry" >>"$log_file" 2>/dev/null
     fi
 
-    # Output to appropriate streams
-    if [[ "$level" -ge "$LOG_LEVEL_WARNING" ]]; then
-      # Warning and above go to stderr
-      echo "$log_entry" >&2
-    else
-      # Debug and info go to stdout
-      echo "$log_entry"
+    # Output to appropriate streams (suppress if in quiet mode)
+    if [[ "${CURRENT_LOG_LEVEL:-1}" -le "$level" ]]; then
+      if [[ "$level" -ge "$LOG_LEVEL_WARNING" ]]; then
+        # Warning and above go to stderr
+        echo "$log_entry" >&2
+      else
+        # Debug and info go to stdout
+        echo "$log_entry"
+      fi
     fi
   fi
 
   return 0
 }
 
-# Enhanced logging functions with validation
+# Enhanced logging functions with component support
 log_debug() {
-  [[ -n "$1" ]] && _log "$LOG_LEVEL_DEBUG" "DEBUG" "$1"
+  local message="$1"
+  local component="${2:-core}"
+  [[ -n "$message" ]] && _log "$LOG_LEVEL_DEBUG" "DEBUG" "$message" "$component"
 }
 
 log_info() {
-  [[ -n "$1" ]] && _log "$LOG_LEVEL_INFO" "INFO" "$1"
+  local message="$1"
+  local component="${2:-core}"
+  [[ -n "$message" ]] && _log "$LOG_LEVEL_INFO" "INFO" "$message" "$component"
 }
 
 log_warning() {
-  [[ -n "$1" ]] && _log "$LOG_LEVEL_WARNING" "WARNING" "$1"
+  local message="$1"
+  local component="${2:-core}"
+  [[ -n "$message" ]] && _log "$LOG_LEVEL_WARNING" "WARNING" "$message" "$component"
 }
 
 log_error() {
-  [[ -n "$1" ]] && _log "$LOG_LEVEL_ERROR" "ERROR" "$1"
+  local message="$1"
+  local component="${2:-core}"
+  [[ -n "$message" ]] && _log "$LOG_LEVEL_ERROR" "ERROR" "$message" "$component" "$ERROR_LOG"
 }
 
 log_critical() {
-  [[ -n "$1" ]] && _log "$LOG_LEVEL_CRITICAL" "CRITICAL" "$1"
+  local message="$1"
+  local component="${2:-core}"
+  [[ -n "$message" ]] && _log "$LOG_LEVEL_CRITICAL" "CRITICAL" "$message" "$component" "$ERROR_LOG"
+}
+
+# Specialized logging functions
+log_performance() {
+  local message="$1"
+  local metrics="${2:-}"
+  local full_message="$message"
+  if [[ -n "$metrics" ]]; then
+    full_message="$message | Metrics: $metrics"
+  fi
+  [[ -n "$message" ]] && _log "$LOG_LEVEL_DEBUG" "PERF" "$full_message" "performance" "$PERFORMANCE_LOG"
+}
+
+log_audit() {
+  local action="$1"
+  local user="${2:-system}"
+  local details="${3:-}"
+  local message="Action: $action | User: $user"
+  if [[ -n "$details" ]]; then
+    message="$message | Details: $details"
+  fi
+  _log "$LOG_LEVEL_INFO" "AUDIT" "$message" "audit" "$AUDIT_LOG"
+}
+
+log_security() {
+  local event="$1"
+  local severity="${2:-medium}"
+  local details="${3:-}"
+  local message="Security Event: $event | Severity: $severity"
+  if [[ -n "$details" ]]; then
+    message="$message | $details"
+  fi
+
+  # Map severity to log level
+  local level="$LOG_LEVEL_WARNING"
+  case "$severity" in
+  low) level="$LOG_LEVEL_INFO" ;;
+  medium) level="$LOG_LEVEL_WARNING" ;;
+  high) level="$LOG_LEVEL_ERROR" ;;
+  critical) level="$LOG_LEVEL_CRITICAL" ;;
+  esac
+
+  _log "$level" "SECURITY" "$message" "security" "$SECURITY_LOG"
+}
+
+# Component-specific logging helpers
+log_plugin() {
+  local level="$1"
+  local message="$2"
+  local plugin_name="${3:-unknown}"
+  local full_message="[$plugin_name] $message"
+
+  case "$level" in
+  debug) log_debug "$full_message" "plugins" ;;
+  info) log_info "$full_message" "plugins" ;;
+  warning) log_warning "$full_message" "plugins" ;;
+  error) log_error "$full_message" "plugins" ;;
+  critical) log_critical "$full_message" "plugins" ;;
+  esac
+}
+
+log_config() {
+  local level="$1"
+  local message="$2"
+
+  case "$level" in
+  debug) log_debug "$message" "config" ;;
+  info) log_info "$message" "config" ;;
+  warning) log_warning "$message" "config" ;;
+  error) log_error "$message" "config" ;;
+  critical) log_critical "$message" "config" ;;
+  esac
+}
+
+log_notification() {
+  local level="$1"
+  local message="$2"
+  local provider="${3:-}"
+  local full_message="$message"
+  if [[ -n "$provider" ]]; then
+    full_message="[$provider] $message"
+  fi
+
+  case "$level" in
+  debug) log_debug "$full_message" "notifications" ;;
+  info) log_info "$full_message" "notifications" ;;
+  warning) log_warning "$full_message" "notifications" ;;
+  error) log_error "$full_message" "notifications" ;;
+  critical) log_critical "$full_message" "notifications" ;;
+  esac
 }
 
 # New utility functions for enhanced logging
@@ -349,18 +610,134 @@ logging_check_size() {
   fi
 }
 
-# Export standardized functions
+# Function: logging_check_health
+# Description: Check log system health and disk usage
+# Returns:
+#   0 - healthy
+#   1 - warnings detected
+#   2 - critical issues detected
+logging_check_health() {
+  local issues=0
+  local warnings=0
+
+  # Check if main log file is writable
+  if [[ ! -w "$LOG_FILE" ]]; then
+    log_error "Main log file is not writable: $LOG_FILE" "logging"
+    ((issues++))
+  fi
+
+  # Check disk usage for log directory
+  local log_disk_usage
+  if command -v df >/dev/null 2>&1; then
+    log_disk_usage=$(df "$LOG_DIR" | awk 'NR==2 {print $5}' | sed 's/%//' 2>/dev/null || echo "0")
+    local threshold=$(config_get_value "logging.advanced.monitoring.disk_usage_threshold" "85")
+
+    if [[ "$log_disk_usage" -ge "$threshold" ]]; then
+      log_warning "Log disk usage is high: ${log_disk_usage}% (threshold: ${threshold}%)" "logging"
+      ((warnings++))
+    fi
+  fi
+
+  # Check log file sizes
+  local max_size=$(config_get_value "logging.file.max_size" "10485760")
+  if [[ -f "$LOG_FILE" ]]; then
+    local current_size
+    current_size=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo "0")
+    if [[ "$current_size" -ge "$max_size" ]]; then
+      log_info "Main log file is approaching rotation size: $(format_bytes "$current_size")" "logging"
+    fi
+  fi
+
+  # Check if specialized logs are accessible
+  for log_file in "$PERFORMANCE_LOG" "$ERROR_LOG" "$AUDIT_LOG" "$SECURITY_LOG"; do
+    if [[ -f "$log_file" && ! -w "$log_file" ]]; then
+      log_warning "Specialized log file is not writable: $log_file" "logging"
+      ((warnings++))
+    fi
+  done
+
+  # Return status based on issues found
+  if [[ "$issues" -gt 0 ]]; then
+    return 2 # Critical issues
+  elif [[ "$warnings" -gt 0 ]]; then
+    return 1 # Warnings
+  else
+    return 0 # Healthy
+  fi
+}
+
+# Function: logging_get_status
+# Description: Get comprehensive logging system status
+# Returns:
+#   Status information via stdout
+logging_get_status() {
+  echo "=== ServerSentry Logging System Status ==="
+  echo "Main Log File: $LOG_FILE"
+  echo "Log Level: $(logging_get_level)"
+  echo "Log Format: $LOG_FORMAT"
+  echo "Timestamp Format: $LOG_TIMESTAMP_FORMAT"
+  echo ""
+
+  echo "Specialized Logs:"
+  echo "  Performance: $PERFORMANCE_LOG"
+  echo "  Error: $ERROR_LOG"
+  echo "  Audit: $AUDIT_LOG"
+  echo "  Security: $SECURITY_LOG"
+  echo ""
+
+  echo "Component Log Levels:"
+  if [[ "$COMPONENT_LOGGING_SUPPORTED" == "true" ]]; then
+    for component in "${!COMPONENT_LOG_LEVELS[@]}"; do
+      local level_name
+      case "${COMPONENT_LOG_LEVELS[$component]}" in
+      0) level_name="debug" ;;
+      1) level_name="info" ;;
+      2) level_name="warning" ;;
+      3) level_name="error" ;;
+      4) level_name="critical" ;;
+      *) level_name="unknown" ;;
+      esac
+      printf "  %-12s: %s\n" "$component" "$level_name"
+    done
+  else
+    echo "  Component-specific logging not supported (bash < 4.0)"
+    echo "  All components use global level: $(logging_get_level)"
+  fi
+  echo ""
+
+  # Log file sizes
+  echo "Log File Sizes:"
+  for log_file in "$LOG_FILE" "$PERFORMANCE_LOG" "$ERROR_LOG" "$AUDIT_LOG" "$SECURITY_LOG"; do
+    if [[ -f "$log_file" ]]; then
+      local size
+      size=$(stat -f%z "$log_file" 2>/dev/null || stat -c%s "$log_file" 2>/dev/null || echo "0")
+      local formatted_size
+      formatted_size=$(format_bytes "$size")
+      printf "  %-20s: %s\n" "$(basename "$log_file")" "$formatted_size"
+    fi
+  done
+}
+
+# Export all logging functions for cross-shell availability
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f logging_init
   export -f logging_set_level
   export -f logging_get_level
   export -f logging_rotate
   export -f logging_cleanup_archives
+  export -f logging_check_health
+  export -f logging_get_status
   export -f log_debug
   export -f log_info
   export -f log_warning
   export -f log_error
   export -f log_critical
+  export -f log_performance
+  export -f log_audit
+  export -f log_security
+  export -f log_plugin
+  export -f log_config
+  export -f log_notification
   export -f log_with_context
   export -f logging_check_size
 fi

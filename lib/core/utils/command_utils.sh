@@ -82,7 +82,7 @@ util_cached_command() {
     COMMAND_CACHE_TIME[$cache_key]="$current_time"
 
     # Log cache activity
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] CACHE_STORE key=$cache_key duration=${cache_duration}s" >>"$COMMAND_CACHE_LOG"
+    log_performance "Command cached" "key=$cache_key duration=${cache_duration}s"
 
     echo "$result"
   else
@@ -103,7 +103,7 @@ util_command_cache_clear() {
   local pattern="${1:-}"
 
   if [[ "$COMMAND_CACHE_SUPPORTED" != "true" ]]; then
-    log_debug "Command cache not supported"
+    log_debug "Command cache not supported" "utils"
     return 0
   fi
 
@@ -111,14 +111,14 @@ util_command_cache_clear() {
     # Clear all cache
     COMMAND_CACHE=()
     COMMAND_CACHE_TIME=()
-    log_debug "Command cache cleared completely"
+    log_debug "Command cache cleared completely" "utils"
   else
     # Clear matching keys
     for key in "${!COMMAND_CACHE[@]}"; do
       if [[ "$key" =~ $pattern ]]; then
         unset COMMAND_CACHE["$key"]
         unset COMMAND_CACHE_TIME["$key"]
-        log_debug "Cleared cache key: $key"
+        log_debug "Cleared cache key: $key" "utils"
       fi
     done
   fi
@@ -195,7 +195,7 @@ util_command_cache_cleanup() {
     fi
   done
 
-  log_debug "Command cache cleanup: removed $cleaned_count expired entries"
+  log_debug "Command cache cleanup: removed $cleaned_count expired entries" "utils"
   return 0
 }
 
@@ -209,11 +209,11 @@ util_batch_commands() {
   local commands=("$@")
 
   if [[ "${#commands[@]}" -eq 0 ]]; then
-    log_error "No commands provided for batch execution"
+    log_error "No commands provided for batch execution" "utils"
     return 1
   fi
 
-  log_debug "Executing ${#commands[@]} commands in batch"
+  log_debug "Executing ${#commands[@]} commands in batch" "utils"
 
   local results=()
   local start_time
@@ -234,7 +234,7 @@ util_batch_commands() {
   if command -v bc >/dev/null 2>&1; then
     local duration
     duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "unknown")
-    log_debug "Batch execution completed in ${duration}s"
+    log_debug "Batch execution completed in ${duration}s" "utils"
   fi
 
   # Output results
@@ -246,7 +246,7 @@ util_batch_commands() {
 # Returns:
 #   0 - success
 util_optimize_common_commands() {
-  log_debug "Pre-caching common system commands"
+  log_debug "Pre-caching common system commands" "utils"
 
   # Common commands that are frequently used
   local common_commands=(
@@ -264,7 +264,7 @@ util_optimize_common_commands() {
     util_cached_command "$cmd" 3600 >/dev/null 2>&1 || true
   done
 
-  log_debug "Common commands pre-cached"
+  log_debug "Common commands pre-cached" "utils"
   return 0
 }
 

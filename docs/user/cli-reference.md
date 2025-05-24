@@ -569,6 +569,73 @@ Components:
   notifications       Reload notification settings
 ```
 
+#### `logging`
+
+Comprehensive logging system management and monitoring.
+
+```bash
+serversentry logging [subcommand] [options]
+
+Subcommands:
+  status              Show logging system status
+  health              Check logging system health
+  rotate              Rotate log files manually
+  cleanup [days]      Clean up old log archives (default: 30 days)
+  level [level]       Get/set log level (debug, info, warning, error, critical)
+  test                Test all logging functions
+  config              Show logging configuration
+  tail [type] [lines] View recent log entries (default: main, 50 lines)
+  follow [type]       Follow log file in real-time (default: main)
+  format [format]     Get/set log format (standard, json, structured)
+
+Log Types:
+  main                Main application log
+  performance         Performance metrics log
+  error               Error and critical messages log
+  audit               Audit trail log
+  security            Security events log
+```
+
+**Examples:**
+
+```bash
+# Show logging system status
+serversentry logging status
+
+# Check logging system health
+serversentry logging health
+
+# Set log level to debug
+serversentry logging level debug
+
+# View last 100 error log entries
+serversentry logging tail error 100
+
+# Follow performance log in real-time
+serversentry logging follow performance
+
+# Test all logging functions
+serversentry logging test
+
+# Change log format to JSON
+serversentry logging format json
+
+# Manually rotate logs
+serversentry logging rotate
+
+# Clean up archives older than 60 days
+serversentry logging cleanup 60
+```
+
+**Log Management Features:**
+
+- **Specialized Log Files**: Separate logs for errors, performance, audit, and security
+- **Component-Specific Logging**: Different log levels for different components
+- **Multiple Formats**: Standard, JSON, and structured logging formats
+- **Automatic Rotation**: Size-based and time-based log rotation
+- **Health Monitoring**: Disk usage and accessibility checks
+- **Real-time Following**: Live log monitoring capabilities
+
 ## Output Formats
 
 ### JSON Output

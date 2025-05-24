@@ -5,9 +5,28 @@
 # This module handles composite checks with logical operators (AND, OR, NOT)
 # Allows creating complex monitoring rules like "CPU > 80% AND Memory > 90%"
 
+# Source logging module
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+COMPOSITE_BASE_DIR="${BASE_DIR:-$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)}"
+
+# Check if logging functions exist, if not try to source or provide fallbacks
+if ! declare -f log_debug >/dev/null 2>&1; then
+  if [ -f "${COMPOSITE_BASE_DIR}/lib/core/logging.sh" ]; then
+    source "${COMPOSITE_BASE_DIR}/lib/core/logging.sh"
+  fi
+
+  # If still not available, provide fallback functions
+  if ! declare -f log_debug >/dev/null 2>&1; then
+    log_debug() { echo "[DEBUG] $1" >&2; }
+    log_info() { echo "[INFO] $1" >&2; }
+    log_warning() { echo "[WARNING] $1" >&2; }
+    log_error() { echo "[ERROR] $1" >&2; }
+  fi
+fi
+
 # Composite check configuration
-COMPOSITE_CONFIG_DIR="${BASE_DIR}/config/composite"
-COMPOSITE_RESULTS_DIR="${BASE_DIR}/logs/composite"
+COMPOSITE_CONFIG_DIR="${COMPOSITE_BASE_DIR}/config/composite"
+COMPOSITE_RESULTS_DIR="${COMPOSITE_BASE_DIR}/logs/composite"
 
 # Initialize composite check system
 init_composite_system() {
@@ -142,10 +161,10 @@ evaluate_composite_rule() {
   local rule="$1"
   local plugin_results="$2" # JSON string with plugin results
 
-  log_debug "Evaluating composite rule: $rule"
+  log_debug "Evaluating composite rule: $rule" "composite"
 
   if ! command -v jq >/dev/null 2>&1; then
-    log_error "jq is required for composite checks"
+    log_error "jq is required for composite checks" "composite"
     return 1
   fi
 
@@ -163,19 +182,150 @@ evaluate_composite_rule() {
   eval_rule="${eval_rule//disk.value/$disk_value}"
   eval_rule="${eval_rule//process.count/$process_value}"
 
+  # Convert comparison operators to arithmetic evaluation format
+  # Replace > with -gt to avoid file redirection
+  eval_rule="${eval_rule// > / -gt }"
+  eval_rule="${eval_rule// < / -lt }"
+  eval_rule="${eval_rule// >= / -ge }"
+  eval_rule="${eval_rule// <= / -le }"
+  eval_rule="${eval_rule// == / -eq }"
+  eval_rule="${eval_rule// != / -ne }"
+
   # Convert logical operators to bash equivalents
   eval_rule="${eval_rule// AND / && }"
   eval_rule="${eval_rule// OR / || }"
   eval_rule="${eval_rule// NOT / ! }"
 
-  log_debug "Transformed rule: $eval_rule"
+  log_debug "Transformed rule: $eval_rule" "composite"
 
-  # Evaluate the rule safely
-  if eval "[ $eval_rule ]" 2>/dev/null; then
-    log_debug "Composite rule evaluated to TRUE"
+  # Evaluate the rule by splitting on logical operators and evaluating each part
+  if command -v bc >/dev/null 2>&1; then
+    # Handle complex expressions with logical operators
+    local final_result
+
+    if [[ "$eval_rule" == *"&&"* ]]; then
+      # Handle AND operations - split on && and all parts must be true
+      local temp_rule="$eval_rule"
+      final_result=1
+      while [[ "$temp_rule" == *" && "* ]]; do
+        # Extract the first part before &&
+        local part="${temp_rule%% && *}"
+        # Remove the processed part from temp_rule
+        temp_rule="${temp_rule#* && }"
+
+        # Clean up the part and convert to bc-compatible format
+        part=$(echo "$part" | sed 's/^ *//; s/ *$//')
+        part="${part// -gt / > }"
+        part="${part// -lt / < }"
+        part="${part// -ge / >= }"
+        part="${part// -le / <= }"
+        part="${part// -eq / == }"
+        part="${part// -ne / != }"
+
+        # Evaluate this part with bc
+        local part_result
+        part_result=$(echo "$part" | bc 2>/dev/null || echo "0")
+
+        if [[ "$part_result" != "1" ]]; then
+          final_result=0
+          break
+        fi
+      done
+
+      # Process the last part if we haven't failed
+      if [[ "$final_result" == "1" ]]; then
+        local part="$temp_rule"
+        part=$(echo "$part" | sed 's/^ *//; s/ *$//')
+        part="${part// -gt / > }"
+        part="${part// -lt / < }"
+        part="${part// -ge / >= }"
+        part="${part// -le / <= }"
+        part="${part// -eq / == }"
+        part="${part// -ne / != }"
+
+        local part_result
+        part_result=$(echo "$part" | bc 2>/dev/null || echo "0")
+
+        if [[ "$part_result" != "1" ]]; then
+          final_result=0
+        fi
+      fi
+
+    elif [[ "$eval_rule" == *"||"* ]]; then
+      # Handle OR operations - split on || and any part can be true
+      local temp_rule="$eval_rule"
+      final_result=0
+      while [[ "$temp_rule" == *" || "* ]]; do
+        # Extract the first part before ||
+        local part="${temp_rule%% || *}"
+        # Remove the processed part from temp_rule
+        temp_rule="${temp_rule#* || }"
+
+        # Clean up the part and convert to bc-compatible format
+        part=$(echo "$part" | sed 's/^ *//; s/ *$//')
+        part="${part// -gt / > }"
+        part="${part// -lt / < }"
+        part="${part// -ge / >= }"
+        part="${part// -le / <= }"
+        part="${part// -eq / == }"
+        part="${part// -ne / != }"
+
+        # Evaluate this part with bc
+        local part_result
+        part_result=$(echo "$part" | bc 2>/dev/null || echo "0")
+
+        if [[ "$part_result" == "1" ]]; then
+          final_result=1
+          break
+        fi
+      done
+
+      # Process the last part if we haven't succeeded
+      if [[ "$final_result" == "0" ]]; then
+        local part="$temp_rule"
+        part=$(echo "$part" | sed 's/^ *//; s/ *$//')
+        part="${part// -gt / > }"
+        part="${part// -lt / < }"
+        part="${part// -ge / >= }"
+        part="${part// -le / <= }"
+        part="${part// -eq / == }"
+        part="${part// -ne / != }"
+
+        local part_result
+        part_result=$(echo "$part" | bc 2>/dev/null || echo "0")
+
+        if [[ "$part_result" == "1" ]]; then
+          final_result=1
+        fi
+      fi
+
+    else
+      # Simple comparison without logical operators
+      local bc_rule="$eval_rule"
+      bc_rule="${bc_rule// -gt / > }"
+      bc_rule="${bc_rule// -lt / < }"
+      bc_rule="${bc_rule// -ge / >= }"
+      bc_rule="${bc_rule// -le / <= }"
+      bc_rule="${bc_rule// -eq / == }"
+      bc_rule="${bc_rule// -ne / != }"
+
+      final_result=$(echo "$bc_rule" | bc 2>/dev/null || echo "0")
+    fi
+
+  else
+    # Fallback: use bash arithmetic evaluation for integer comparisons
+    if eval "[[ $eval_rule ]]" 2>/dev/null; then
+      final_result=1
+    else
+      final_result=0
+    fi
+  fi
+
+  if [[ "$final_result" == "1" ]]; then
+    log_debug "Composite rule evaluated to TRUE" "composite"
     return 0 # Rule matched
   else
-    log_debug "Composite rule evaluated to FALSE"
+    log_debug "Composite rule evaluated to FALSE" "composite"
     return 1 # Rule not matched
   fi
 }
@@ -197,24 +347,27 @@ get_triggered_conditions() {
   memory_value=$(echo "$plugin_results" | jq -r '.plugins[] | select(.name=="memory") | .metrics.value // 0')
   disk_value=$(echo "$plugin_results" | jq -r '.plugins[] | select(.name=="disk") | .metrics.value // 0')
 
-  # Check individual conditions
+  # Check individual conditions using safe numeric comparison
   if [[ "$rule" == *"cpu.value"* ]] && echo "$rule" | grep -q "cpu\.value > [0-9]*"; then
     local threshold=$(echo "$rule" | grep -o "cpu\.value > [0-9]*" | grep -o "[0-9]*")
-    if [ "$cpu_value" -gt "$threshold" ]; then
+    # Use arithmetic comparison to avoid redirection
+    if [[ $(echo "$cpu_value > $threshold" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
       conditions+="CPU: ${cpu_value}% (>${threshold}%) "
     fi
   fi
 
   if [[ "$rule" == *"memory.value"* ]] && echo "$rule" | grep -q "memory\.value > [0-9]*"; then
     local threshold=$(echo "$rule" | grep -o "memory\.value > [0-9]*" | grep -o "[0-9]*")
-    if [ "$memory_value" -gt "$threshold" ]; then
+    # Use arithmetic comparison to avoid redirection
+    if [[ $(echo "$memory_value > $threshold" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
       conditions+="Memory: ${memory_value}% (>${threshold}%) "
     fi
   fi
 
   if [[ "$rule" == *"disk.value"* ]] && echo "$rule" | grep -q "disk\.value > [0-9]*"; then
     local threshold=$(echo "$rule" | grep -o "disk\.value > [0-9]*" | grep -o "[0-9]*")
-    if [ "$disk_value" -gt "$threshold" ]; then
+    # Use arithmetic comparison to avoid redirection
+    if [[ $(echo "$disk_value > $threshold" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
       conditions+="Disk: ${disk_value}% (>${threshold}%) "
     fi
   fi

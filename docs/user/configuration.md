@@ -54,6 +54,128 @@ system:
   max_log_size: 10485760 # 10MB in bytes
   max_log_archives: 10 # number of archived logs to keep
 
+# Comprehensive Logging Configuration
+logging:
+  # Global Log Settings
+  global:
+    enabled: true
+    default_level: info # debug, info, warning, error, critical
+    output_format: standard # standard, json, structured
+    timestamp_format: "%Y-%m-%d %H:%M:%S"
+    include_caller: false # Include function/line info in logs
+    buffer_size: 1024 # Log buffer size in bytes
+
+  # File Logging Configuration
+  file:
+    enabled: true
+    main_log: "logs/serversentry.log"
+    max_size: 10485760 # 10MB per log file
+    max_archives: 10 # Keep 10 archived log files
+    compression: true # Compress archived logs
+    permissions: 644 # File permissions for log files
+
+    # Rotation Policies
+    rotation:
+      policy: size # size, time, both
+      size_threshold: 10485760 # 10MB
+      time_interval: daily # daily, weekly, monthly
+      time_hour: 2 # Hour for daily rotation (2 AM)
+      preserve_extension: true # Keep .log extension
+
+    # Archive Management
+    archive:
+      enabled: true
+      directory: "logs/archive"
+      compression_format: gzip # gzip, bzip2, xz
+      retention_days: 30 # Delete archives older than 30 days
+      cleanup_on_startup: true # Clean old archives on startup
+
+  # Component-Specific Log Levels
+  components:
+    core: info # Core system components
+    plugins: info # Plugin system
+    notifications: info # Notification system
+    config: warning # Configuration system
+    utils: warning # Utility functions
+    ui: info # User interface components
+    performance: debug # Performance monitoring
+    security: warning # Security-related logs
+
+  # Specialized Log Files
+  specialized:
+    # Performance Logging
+    performance:
+      enabled: true
+      file: "logs/performance.log"
+      level: debug
+      max_size: 5242880 # 5MB
+      max_archives: 5
+      include_metrics: true
+
+    # Error Logging
+    error:
+      enabled: true
+      file: "logs/error.log"
+      level: error
+      max_size: 5242880 # 5MB
+      max_archives: 10
+      include_stack_trace: true
+
+    # Audit Logging
+    audit:
+      enabled: true
+      file: "logs/audit.log"
+      level: info
+      max_size: 10485760 # 10MB
+      max_archives: 20 # Keep more audit logs
+      immutable: true # Don't rotate, only archive
+
+    # Security Logging
+    security:
+      enabled: true
+      file: "logs/security.log"
+      level: warning
+      max_size: 5242880 # 5MB
+      max_archives: 15
+
+  # Advanced Logging Features
+  advanced:
+    # Structured Logging
+    structured:
+      enabled: false # Enable JSON/structured logging
+      format: json # json, logfmt
+      include_metadata: true
+
+    # Remote Logging
+    remote:
+      enabled: false
+      protocol: syslog # syslog, http, tcp
+      host: "localhost"
+      port: 514
+      facility: local0
+
+    # Log Monitoring
+    monitoring:
+      enabled: true
+      self_check_interval: 300 # Check log system health every 5 mins
+      disk_usage_threshold: 85 # Alert if log partition > 85%
+      file_handle_threshold: 80 # Alert if file handles > 80%
+
+    # Rate Limiting
+    rate_limiting:
+      enabled: true
+      max_messages_per_second: 100
+      burst_size: 200
+      cooldown_period: 10
+
+  # Development & Debug Settings
+  development:
+    enabled: false # Enable only in development
+    verbose_startup: false # Detailed startup logging
+    function_tracing: false # Trace function calls
+    memory_logging: false # Log memory usage
+    timing_logs: false # Log execution timing
+
 # Plugin Configuration
 plugins:
   enabled: [cpu, memory, disk, process]
@@ -139,6 +261,68 @@ advanced:
 #### System Settings
 
 Controls core ServerSentry behavior and system-wide settings.
+
+#### Logging System
+
+The comprehensive logging system provides professional-grade logging capabilities with multiple log files, formats, and management features.
+
+**Global Log Settings:**
+
+- `default_level`: Sets the overall log verbosity (debug, info, warning, error, critical)
+- `output_format`: Choose between standard, JSON, or structured formats
+- `timestamp_format`: Customize timestamp format using strftime patterns
+- `include_caller`: Add function/line information for debugging
+
+**File Logging Configuration:**
+
+- `main_log`: Primary log file location
+- `max_size`: Maximum size before rotation (bytes)
+- `max_archives`: Number of archived logs to retain
+- `compression`: Enable gzip compression of archives
+- `permissions`: File permissions for log files
+
+**Rotation Policies:**
+
+- `policy`: Rotation trigger (size, time, or both)
+- `size_threshold`: File size limit for rotation
+- `time_interval`: Rotation schedule (daily, weekly, monthly)
+- `time_hour`: Hour for time-based rotation (24-hour format)
+
+**Component-Specific Logging:**
+Different components can have individual log levels:
+
+- `core`: Core system components
+- `plugins`: Plugin system operations
+- `notifications`: Notification system events
+- `config`: Configuration loading and validation
+- `utils`: Utility function operations
+- `ui`: User interface components
+- `performance`: Performance monitoring data
+- `security`: Security-related events
+
+**Specialized Log Files:**
+
+- **Performance Log**: Captures timing, metrics, and performance data
+- **Error Log**: Dedicated file for error and critical messages
+- **Audit Log**: User actions and system changes for compliance
+- **Security Log**: Security events with severity classification
+
+**Advanced Features:**
+
+- **Structured Logging**: JSON or logfmt output for analysis tools
+- **Remote Logging**: Send logs to syslog or HTTP endpoints
+- **Health Monitoring**: Monitor log system disk usage and health
+- **Rate Limiting**: Prevent log flooding with message limits
+
+**CLI Management:**
+Use `serversentry logging` commands to manage the logging system:
+
+```bash
+serversentry logging status    # View system status
+serversentry logging health    # Check system health
+serversentry logging tail error 50    # View error logs
+serversentry logging follow performance    # Real-time monitoring
+```
 
 #### Plugin Configuration
 

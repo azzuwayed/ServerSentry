@@ -76,7 +76,7 @@ util_performance_timer_stop() {
   fi
 
   # Log performance data
-  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] TIMER name=$timer_name duration=${duration}s" >>"$PERFORMANCE_LOG"
+  log_performance "Timer completed" "name=$timer_name duration=${duration}s"
 
   echo "$duration"
   return 0
@@ -126,7 +126,7 @@ util_performance_measure() {
   fi
 
   # Log performance data
-  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] MEASURE operation=$operation_name duration=${duration}s exit_code=$exit_code" >>"$PERFORMANCE_LOG"
+  log_performance "Command execution measured" "operation=$operation_name duration=${duration}s exit_code=$exit_code"
 
   # Output result
   echo "$result"
@@ -267,10 +267,10 @@ util_performance_benchmark_system() {
   echo "$results_json" >"$BENCHMARK_RESULTS"
 
   # Log benchmark completion
-  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BENCHMARK total_duration=${total_duration}s cpu=${cpu_duration}s mem=${mem_duration}s io=${io_duration}s cmd=${cmd_duration}s" >>"$PERFORMANCE_LOG"
+  log_performance "System benchmark completed" "total_duration=${total_duration}s cpu=${cpu_duration}s mem=${mem_duration}s io=${io_duration}s cmd=${cmd_duration}s"
 
-  log_info "System benchmark completed in ${total_duration}s"
   echo "$results_json"
+  return 0
 }
 
 # Function: util_performance_get_stats

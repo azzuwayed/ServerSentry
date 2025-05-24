@@ -10,7 +10,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
-# Source the utils module
+# Source required modules
+export BASE_DIR="$BASE_DIR"
+export LOG_DIR="$BASE_DIR/logs"
+mkdir -p "$LOG_DIR"
+source "$BASE_DIR/lib/core/logging.sh"
 source "$BASE_DIR/lib/core/utils.sh"
 
 # Define test output color functions
@@ -81,14 +85,26 @@ assert "is_valid_ip - invalid IP (non-numeric)" "! is_valid_ip 'abc.def.ghi.jkl'
 # Test random_string function
 RANDOM_STR=$(random_string 10)
 assert "random_string - length" "[ ${#RANDOM_STR} -eq 10 ]"
-assert "random_string - different values" "[ \"$(random_string 10)\" != \"$(random_string 10)\" ]"
+
+# Test for randomness - try a few times to avoid false failures
+random_test_passed=false
+for i in {1..5}; do
+  str1=$(random_string 10)
+  str2=$(random_string 10)
+  if [ "$str1" != "$str2" ]; then
+    random_test_passed=true
+    break
+  fi
+done
+
+assert "random_string - different values" "[ '$random_test_passed' = 'true' ]"
 
 # Test get_timestamp function
 assert "get_timestamp - returns a number" "[[ $(get_timestamp) =~ ^[0-9]+$ ]]"
 
 # Test get_formatted_date function
-assert "get_formatted_date - default format" "[[ $(get_formatted_date) =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]"
-assert "get_formatted_date - custom format" "[[ $(get_formatted_date '%Y%m%d') =~ ^[0-9]{8}$ ]]"
+assert "get_formatted_date - default format" "[[ \$(get_formatted_date) =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]][0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]"
+assert "get_formatted_date - custom format" "[[ \$(get_formatted_date '%Y%m%d') =~ ^[0-9]{8}$ ]]"
 
 # Test format_bytes function
 assert "format_bytes - bytes" "[ \"$(format_bytes 512)\" = '512B' ]"

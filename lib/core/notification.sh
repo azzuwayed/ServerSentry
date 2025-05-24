@@ -16,18 +16,18 @@ declare -a registered_providers
 #   0 - success
 #   1 - failure
 notification_system_init() {
-  log_debug "Initializing notification system"
+  log_debug "Initializing notification system" "notifications"
 
   # Make sure notification directories exist
   if [ ! -d "$NOTIFICATION_DIR" ]; then
-    log_warning "Notification directory not found: $NOTIFICATION_DIR"
-    log_info "Creating notification directory"
+    log_warning "Notification directory not found: $NOTIFICATION_DIR" "notifications"
+    log_info "Creating notification directory" "notifications"
     mkdir -p "$NOTIFICATION_DIR" || return 1
   fi
 
   if [ ! -d "$NOTIFICATION_CONFIG_DIR" ]; then
-    log_warning "Notification config directory not found: $NOTIFICATION_CONFIG_DIR"
-    log_info "Creating notification config directory"
+    log_warning "Notification config directory not found: $NOTIFICATION_CONFIG_DIR" "notifications"
+    log_info "Creating notification config directory" "notifications"
     mkdir -p "$NOTIFICATION_CONFIG_DIR" || return 1
   fi
 
@@ -35,11 +35,11 @@ notification_system_init() {
   registered_providers=()
 
   # Check if notifications are enabled
-  local notification_enabled
-  notification_enabled=$(config_get_value "notification_enabled" "false")
+  local notifications_enabled
+  notifications_enabled=$(config_get_value "notifications.enabled" "false")
 
-  if [ "$notification_enabled" != "true" ]; then
-    log_info "Notifications are disabled in configuration"
+  if [[ "$notifications_enabled" != "true" ]]; then
+    log_debug "Notifications are disabled in configuration" "notifications"
     return 0
   fi
 
@@ -52,19 +52,19 @@ notification_system_init() {
   channel_list=$(echo "$notification_channels" | tr -d '[]' | tr ',' ' ')
 
   if [ -z "$channel_list" ]; then
-    log_warning "No notification channels configured"
+    log_warning "No notification channels configured" "notifications"
     return 0
   fi
 
-  log_info "Loading notification providers: $channel_list"
+  log_info "Loading notification providers: $channel_list" "notifications"
 
   # Load each provider
   for provider_name in $channel_list; do
-    log_debug "Loading notification provider: $provider_name"
-    load_notification_provider "$provider_name" || log_error "Failed to load notification provider: $provider_name"
+    log_debug "Loading notification provider: $provider_name" "notifications"
+    load_notification_provider "$provider_name" || log_error "Failed to load notification provider: $provider_name" "notifications"
   done
 
-  log_info "Loaded ${#registered_providers[@]} notification providers"
+  log_info "Loaded ${#registered_providers[@]} notification providers" "notifications"
 
   return 0
 }
@@ -77,12 +77,12 @@ load_notification_provider() {
 
   # Check if provider exists
   if [ ! -f "$provider_path" ]; then
-    log_error "Notification provider not found: $provider_path"
+    log_error "Notification provider not found: $provider_path" "notifications"
     return 1
   fi
 
   # Source the provider file
-  log_debug "Sourcing notification provider: $provider_path"
+  log_debug "Sourcing notification provider: $provider_path" "notifications"
   source "$provider_path" || return 1
 
   # Register the provider
@@ -90,11 +90,11 @@ load_notification_provider() {
 
   # Configure the provider
   "${provider_name}"_provider_configure "$provider_config" || {
-    log_error "Failed to configure notification provider: $provider_name"
+    log_error "Failed to configure notification provider: $provider_name" "notifications"
     return 1
   }
 
-  log_info "Notification provider loaded successfully: $provider_name"
+  log_info "Notification provider loaded successfully: $provider_name" "notifications"
   return 0
 }
 
@@ -105,7 +105,7 @@ validate_notification_provider() {
 
   for func in "${required_functions[@]}"; do
     if ! declare -f "${provider_name}_${func}" >/dev/null; then
-      log_error "Notification provider $provider_name does not implement required function: $func"
+      log_error "Notification provider $provider_name does not implement required function: $func" "notifications"
       return 1
     fi
   done

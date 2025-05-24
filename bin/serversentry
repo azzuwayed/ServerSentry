@@ -10,6 +10,18 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Early argument parsing for log level settings
+for arg in "$@"; do
+  case "$arg" in
+  -q | --quiet)
+    export CURRENT_LOG_LEVEL=3 # ERROR level
+    ;;
+  -v | --verbose | -d | --debug)
+    export CURRENT_LOG_LEVEL=0 # DEBUG level
+    ;;
+  esac
+done
+
 # Source core components in proper order
 source "$BASE_DIR/lib/core/logging.sh" # Load logging first
 source "$BASE_DIR/lib/core/utils.sh"   # Load utilities second
@@ -40,7 +52,7 @@ source "$BASE_DIR/lib/ui/cli/commands.sh"
 # Main function with enhanced error handling
 main() {
   # Initialize the application with proper logging
-  log_info "Starting ServerSentry v2"
+  log_debug "Starting ServerSentry v2"
   log_debug "Base directory: $BASE_DIR"
   log_debug "Configuration loaded from: $(config_get_value 'config_file' 'default')"
 
@@ -50,25 +62,33 @@ main() {
     exit 1
   fi
 
-  local loaded_plugins
-  loaded_plugins=$(plugin_list_loaded | wc -l)
-  log_info "Plugin system initialized with $loaded_plugins plugins"
-
   # Initialize notification system with new standardized function
   if ! notification_system_init; then
     log_error "Failed to initialize notification system"
     # Non-fatal error, continue without notifications
     log_warning "Continuing without notification support"
   else
-    log_info "Notification system initialized successfully"
+    log_debug "Notification system initialized successfully"
   fi
 
-  # Log system status
-  log_info "System Status:"
-  log_info "- Log Level: $(logging_get_level)"
-  log_info "- Config Namespace: $(config_get_value 'namespace' 'config')"
-  log_info "- Plugins Enabled: $(config_get_value 'plugins_enabled' 'none')"
-  log_info "- Notifications Enabled: $(config_get_value 'notification_enabled' 'false')"
+  # Log system status only for status, help, or debug commands
+  local command="${1:-status}"
+  if [[ "$command" == "status" || "$command" == "help" || "$command" == "-d" || "$command" == "--debug" ]]; then
+    log_debug "System Status:"
+    log_debug "- Log Level: $(logging_get_level)"
+    log_debug "- Config Namespace: $(config_get_value 'namespace' 'config')"
+
+    # Display enabled plugins (handle array properly)
+    local enabled_plugins
+    enabled_plugins=$(config_get_array 'plugins.enabled' | tr '\n' ',' | sed 's/,$//')
+    if [[ -n "$enabled_plugins" ]]; then
+      log_debug "- Plugins Enabled: $enabled_plugins"
+    else
+      log_debug "- Plugins Enabled: none"
+    fi
+
+    log_debug "- Notifications Enabled: $(config_get_value 'notifications.enabled' 'false')"
+  fi
 
   # Process command line arguments
   if ! process_commands "$@"; then
@@ -76,7 +96,7 @@ main() {
     exit 1
   fi
 
-  log_info "ServerSentry v2 finished successfully"
+  log_debug "ServerSentry v2 finished successfully"
 }
 
 # Trap for cleanup

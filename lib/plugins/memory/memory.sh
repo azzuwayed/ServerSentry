@@ -204,12 +204,12 @@ memory_plugin_check() {
     free_memory_human=$(format_bytes "$free_memory" 2>&1 || echo "$free_memory B")
 
     # Format swap if available
-    if [ "$memory_include_swap" = "true" ] && [ $(echo "$swap_total > 0" | bc) -eq 1 ]; then
+    if [ "$memory_include_swap" = "true" ] && [[ $(echo "$swap_total > 0" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
       swap_total_human=$(format_bytes "$swap_total")
       swap_used_human=$(format_bytes "$swap_used")
 
       # Calculate swap percentage
-      if [ $(echo "$swap_total > 0" | bc) -eq 1 ]; then
+      if [[ $(echo "$swap_total > 0" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
         swap_percent=$(echo "scale=1; $swap_used * 100 / $swap_total" | bc)
       else
         swap_percent="0.0"

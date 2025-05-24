@@ -82,7 +82,7 @@ config_load() {
   # Load environment variable overrides
   util_config_load_env_overrides "SERVERSENTRY" "$CONFIG_NAMESPACE"
 
-  log_info "Configuration loaded and validated successfully"
+  log_debug "Configuration loaded and validated successfully"
   return 0
 }
 
@@ -97,6 +97,17 @@ config_get_value() {
   local default_value="${2:-}"
 
   util_config_get_value "$key" "$default_value" "$CONFIG_NAMESPACE"
+}
+
+# Get configuration array values
+# Parameters:
+#   $1 - key name (without array index)
+# Returns:
+#   Array values separated by newlines via stdout
+config_get_array() {
+  local key="$1"
+
+  util_config_get_array "$key" "$CONFIG_NAMESPACE"
 }
 
 # Set configuration value with validation
@@ -247,6 +258,7 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f config_init
   export -f config_load
   export -f config_get_value
+  export -f config_get_array
   export -f config_set_value
   export -f config_create_default
   export -f config_validate

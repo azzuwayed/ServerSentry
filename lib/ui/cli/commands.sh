@@ -4,6 +4,11 @@
 #
 # This module handles the command-line interface commands
 
+# Source UI components
+if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
+  source "$BASE_DIR/lib/ui/cli/colors.sh"
+fi
+
 # Help text
 show_help() {
   cat <<EOF
@@ -31,9 +36,11 @@ Commands:
   update-threshold    Update a threshold value (e.g., cpu_threshold=85)
   list-thresholds     List all thresholds and configuration
   monitor             Run continuous monitoring daemon
+  logging             Manage logging system (status, health, rotate, config)
 
 Options:
   -v, --verbose       Enable verbose output
+  -q, --quiet         Suppress warning messages (for automation)
   -c, --config FILE   Use alternative config file
   -d, --debug         Enable debug mode
   -h, --help          Show this help message
@@ -53,6 +60,10 @@ process_commands() {
       CURRENT_LOG_LEVEL=$LOG_LEVEL_DEBUG
       shift
       ;;
+    -q | --quiet)
+      CURRENT_LOG_LEVEL=$LOG_LEVEL_ERROR
+      shift
+      ;;
     -c | --config)
       MAIN_CONFIG="$2"
       shift 2
@@ -67,7 +78,7 @@ process_commands() {
       exit 0
       ;;
     # Commands
-    status | start | stop | check | list | configure | logs | version | help | tui | webhook | template | update-threshold | list-thresholds | composite | anomaly | reload | diagnostics | monitor)
+    status | start | stop | check | list | configure | logs | version | help | tui | webhook | template | update-threshold | list-thresholds | composite | anomaly | reload | diagnostics | monitor | logging)
       command="$1"
       shift
       break
@@ -146,6 +157,9 @@ process_commands() {
   monitor)
     cmd_monitor "$@"
     ;;
+  logging)
+    cmd_logging "$@"
+    ;;
   *)
     log_error "Unknown command: $command"
     show_help
@@ -163,7 +177,7 @@ cmd_status() {
 
   print_header "ServerSentry Status" 60
 
-  log_info "Checking system status..."
+  log_info "Checking system status..." "ui"
 
   # Check if monitoring is running
   if is_monitoring_running; then
@@ -175,30 +189,30 @@ cmd_status() {
   echo ""
 
   # Run all plugin checks
-  log_debug "Running all plugin checks"
+  log_debug "Running all plugin checks" "ui"
   local results
   results=$(run_all_plugin_checks)
 
   # Parse and display results with colors
-  if command -v jq >/dev/null 2>&1 && [ -n "$results" ]; then
-    echo "$results" | jq -r '.plugins[]? | "\(.name)|\(.status_code)|\(.status_message)|\(.metrics.value // "N/A")|\(.metrics.threshold // "N/A")"' | while IFS='|' read -r plugin status_code message value threshold; do
-      if [ -n "$plugin" ]; then
+  if command -v jq >/dev/null 2>&1 && [[ -n "$results" ]]; then
+    echo "$results" | jq -r '.[] | "\(.plugin)|\(.status_code)|\(.status_message)|\(.metrics.usage_percent // "N/A")|\(.metrics.threshold // "N/A")"' | while IFS='|' read -r plugin status_code message value threshold; do
+      if [[ -n "$plugin" ]]; then
         case "$status_code" in
         0)
           print_status "ok" "$plugin: $message"
-          if [ "$value" != "N/A" ] && [ "$threshold" != "N/A" ]; then
+          if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
             create_metric_bar "$value" "$threshold" "  └─ Usage"
           fi
           ;;
         1)
           print_status "warning" "$plugin: $message"
-          if [ "$value" != "N/A" ] && [ "$threshold" != "N/A" ]; then
+          if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
             create_metric_bar "$value" "$threshold" "  └─ Usage"
           fi
           ;;
         2)
           print_status "error" "$plugin: $message"
-          if [ "$value" != "N/A" ] && [ "$threshold" != "N/A" ]; then
+          if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
             create_metric_bar "$value" "$threshold" "  └─ Usage"
           fi
           ;;
@@ -219,11 +233,12 @@ cmd_status() {
 
 # Command: start
 cmd_start() {
-  log_info "Starting monitoring..."
+  log_info "Starting monitoring..." "ui"
+  log_audit "start_monitoring" "${USER:-unknown}" "User initiated monitoring start via CLI"
 
   # Check if already running
   if is_monitoring_running; then
-    log_warning "Monitoring is already running"
+    log_warning "Monitoring is already running" "ui"
     return 0
   fi
 
@@ -231,16 +246,18 @@ cmd_start() {
   nohup "$BASE_DIR/bin/serversentry" monitor >/dev/null 2>&1 &
   echo $! >"${BASE_DIR}/serversentry.pid"
 
-  log_info "Monitoring started with PID $(cat "${BASE_DIR}/serversentry.pid")"
+  log_info "Monitoring started with PID $(cat "${BASE_DIR}/serversentry.pid")" "ui"
+  log_audit "monitoring_started" "${USER:-unknown}" "PID=$(cat "${BASE_DIR}/serversentry.pid" 2>/dev/null)"
 }
 
 # Command: stop
 cmd_stop() {
-  log_info "Stopping monitoring..."
+  log_info "Stopping monitoring..." "ui"
+  log_audit "stop_monitoring" "${USER:-unknown}" "User initiated monitoring stop via CLI"
 
   # Check if running
   if ! is_monitoring_running; then
-    log_warning "Monitoring is not running"
+    log_warning "Monitoring is not running" "ui"
     return 0
   fi
 
@@ -252,9 +269,10 @@ cmd_stop() {
     # Kill the process
     kill "$pid" 2>/dev/null
     rm -f "${BASE_DIR}/serversentry.pid"
-    log_info "Monitoring stopped"
+    log_info "Monitoring stopped" "ui"
+    log_audit "monitoring_stopped" "${USER:-unknown}" "PID=$pid"
   else
-    log_error "Could not find monitoring PID"
+    log_error "Could not find monitoring PID" "ui"
     return 1
   fi
 }
@@ -265,15 +283,17 @@ cmd_check() {
 
   if [ -z "$plugin_name" ]; then
     # Check all plugins
-    log_info "Running all plugin checks..."
+    log_info "Running all plugin checks..." "ui"
+    log_audit "check_all_plugins" "${USER:-unknown}" "User requested all plugin checks"
     run_all_plugin_checks | jq
   else
     # Check specific plugin
-    log_info "Running check for plugin: $plugin_name"
+    log_info "Running check for plugin: $plugin_name" "ui"
+    log_audit "check_plugin" "${USER:-unknown}" "plugin=$plugin_name"
     if is_plugin_registered "$plugin_name"; then
       run_plugin_check "$plugin_name" | jq
     else
-      log_error "Plugin not found: $plugin_name"
+      log_error "Plugin not found: $plugin_name" "ui"
       echo "Available plugins:"
       list_plugins
       return 1
@@ -283,16 +303,19 @@ cmd_check() {
 
 # Command: list
 cmd_list() {
-  log_info "Listing available plugins..."
+  log_info "Listing available plugins..." "ui"
   list_plugins
 }
 
 # Command: configure
 cmd_configure() {
-  log_info "Opening configuration..."
+  log_info "Opening configuration..." "ui"
+  log_audit "edit_config" "${USER:-unknown}" "User opened configuration file for editing"
 
   # Open with default editor
   ${EDITOR:-vi} "$MAIN_CONFIG"
+
+  log_audit "config_edit_completed" "${USER:-unknown}" "Configuration editing session completed"
 }
 
 # Command: logs
@@ -302,19 +325,22 @@ cmd_logs() {
   case "$subcommand" in
   view)
     # View logs
+    log_audit "view_logs" "${USER:-unknown}" "User viewed log file"
     tail -n 50 "$LOG_FILE"
     ;;
   rotate)
     # Rotate logs
+    log_audit "rotate_logs" "${USER:-unknown}" "User manually rotated logs"
     rotate_logs
     ;;
   clear)
     # Clear logs
-    log_warning "Clearing logs..."
+    log_warning "Clearing logs..." "ui"
+    log_audit "clear_logs" "${USER:-unknown}" "User cleared log file"
     >"$LOG_FILE"
     ;;
   *)
-    log_error "Unknown logs subcommand: $subcommand"
+    log_error "Unknown logs subcommand: $subcommand" "ui"
     echo "Available subcommands: view, rotate, clear"
     return 1
     ;;
@@ -396,8 +422,14 @@ cmd_webhook() {
   list)
     echo "Configured webhooks:"
     local webhook_config="$BASE_DIR/config/notifications/webhook.conf"
-    if [ -f "$webhook_config" ]; then
-      grep "^webhook_url=" "$webhook_config" | cut -d'"' -f2 | nl -w2 -s'. '
+    if [[ -f "$webhook_config" ]]; then
+      local webhook_urls
+      webhook_urls=$(grep "^webhook_url=" "$webhook_config" 2>/dev/null || true)
+      if [[ -n "$webhook_urls" ]]; then
+        echo "$webhook_urls" | cut -d'"' -f2 | nl -w2 -s'. '
+      else
+        echo "No webhooks configured."
+      fi
     else
       echo "No webhooks configured."
     fi
@@ -1149,4 +1181,254 @@ cmd_monitor() {
     # Sleep for the specified interval
     sleep "$interval"
   done
+}
+
+# Command: logging
+cmd_logging() {
+  local subcommand="${1:-status}"
+  shift
+
+  case "$subcommand" in
+  status)
+    echo "ServerSentry Logging System Status"
+    echo "=================================="
+    logging_get_status
+    ;;
+  health)
+    echo "Checking logging system health..."
+    if logging_check_health; then
+      echo "✅ Logging system is healthy"
+    else
+      local exit_code=$?
+      case $exit_code in
+      1) echo "⚠️ Logging system has warnings" ;;
+      2) echo "❌ Logging system has critical issues" ;;
+      *) echo "❓ Unknown logging system status" ;;
+      esac
+    fi
+    ;;
+  rotate)
+    echo "Rotating log files..."
+    if logging_rotate; then
+      echo "✅ Log rotation completed successfully"
+    else
+      echo "❌ Log rotation failed"
+      return 1
+    fi
+    ;;
+  cleanup)
+    local days="${1:-30}"
+    echo "Cleaning up log archives older than $days days..."
+    logging_cleanup_archives "$days"
+    echo "✅ Log cleanup completed"
+    ;;
+  level)
+    local new_level="$1"
+    if [[ -z "$new_level" ]]; then
+      echo "Current log level: $(logging_get_level)"
+    else
+      if logging_set_level "$new_level"; then
+        echo "✅ Log level set to: $new_level"
+      else
+        echo "❌ Invalid log level: $new_level"
+        echo "Valid levels: debug, info, warning, error, critical"
+        return 1
+      fi
+    fi
+    ;;
+  test)
+    echo "Testing logging system..."
+    echo ""
+
+    # Test all log levels
+    log_debug "This is a debug message" "test"
+    log_info "This is an info message" "test"
+    log_warning "This is a warning message" "test"
+    log_error "This is an error message" "test"
+
+    # Test specialized logging
+    log_performance "Performance test message" "duration=0.5s memory=1MB"
+    log_audit "test_action" "test_user" "Testing audit logging"
+    log_security "test_event" "low" "Testing security logging"
+
+    echo ""
+    echo "✅ Logging test completed. Check log files for output."
+    ;;
+  config)
+    echo "Logging Configuration:"
+    echo "====================="
+    echo "Global Settings:"
+    echo "  Default Level: $(config_get_value 'logging.global.default_level' 'info')"
+    echo "  Output Format: $(config_get_value 'logging.global.output_format' 'standard')"
+    echo "  Include Caller: $(config_get_value 'logging.global.include_caller' 'false')"
+    echo ""
+    echo "File Settings:"
+    echo "  Main Log: $(config_get_value 'logging.file.main_log' 'logs/serversentry.log')"
+    echo "  Max Size: $(config_get_value 'logging.file.max_size' '10485760') bytes"
+    echo "  Max Archives: $(config_get_value 'logging.file.max_archives' '10')"
+    echo "  Compression: $(config_get_value 'logging.file.compression' 'true')"
+    echo ""
+    echo "Specialized Logs:"
+    echo "  Performance: $(config_get_value 'logging.specialized.performance.enabled' 'true')"
+    echo "  Error: $(config_get_value 'logging.specialized.error.enabled' 'true')"
+    echo "  Audit: $(config_get_value 'logging.specialized.audit.enabled' 'true')"
+    echo "  Security: $(config_get_value 'logging.specialized.security.enabled' 'true')"
+    ;;
+  tail)
+    local log_type="${1:-main}"
+    local lines="${2:-50}"
+
+    case "$log_type" in
+    main)
+      echo "Showing last $lines lines of main log:"
+      tail -n "$lines" "$LOG_FILE"
+      ;;
+    performance)
+      echo "Showing last $lines lines of performance log:"
+      tail -n "$lines" "$PERFORMANCE_LOG" 2>/dev/null || echo "Performance log not found"
+      ;;
+    error)
+      echo "Showing last $lines lines of error log:"
+      tail -n "$lines" "$ERROR_LOG" 2>/dev/null || echo "Error log not found"
+      ;;
+    audit)
+      echo "Showing last $lines lines of audit log:"
+      tail -n "$lines" "$AUDIT_LOG" 2>/dev/null || echo "Audit log not found"
+      ;;
+    security)
+      echo "Showing last $lines lines of security log:"
+      tail -n "$lines" "$SECURITY_LOG" 2>/dev/null || echo "Security log not found"
+      ;;
+    *)
+      echo "Unknown log type: $log_type"
+      echo "Available types: main, performance, error, audit, security"
+      return 1
+      ;;
+    esac
+    ;;
+  follow)
+    local log_type="${1:-main}"
+
+    case "$log_type" in
+    main)
+      echo "Following main log (Press Ctrl+C to stop):"
+      tail -f "$LOG_FILE"
+      ;;
+    performance)
+      echo "Following performance log (Press Ctrl+C to stop):"
+      tail -f "$PERFORMANCE_LOG" 2>/dev/null || echo "Performance log not found"
+      ;;
+    error)
+      echo "Following error log (Press Ctrl+C to stop):"
+      tail -f "$ERROR_LOG" 2>/dev/null || echo "Error log not found"
+      ;;
+    audit)
+      echo "Following audit log (Press Ctrl+C to stop):"
+      tail -f "$AUDIT_LOG" 2>/dev/null || echo "Audit log not found"
+      ;;
+    security)
+      echo "Following security log (Press Ctrl+C to stop):"
+      tail -f "$SECURITY_LOG" 2>/dev/null || echo "Security log not found"
+      ;;
+    *)
+      echo "Unknown log type: $log_type"
+      echo "Available types: main, performance, error, audit, security"
+      return 1
+      ;;
+    esac
+    ;;
+  format)
+    local new_format="$1"
+    if [[ -z "$new_format" ]]; then
+      echo "Current log format: $LOG_FORMAT"
+      echo "Available formats: standard, json, structured"
+    else
+      case "$new_format" in
+      standard | json | structured)
+        LOG_FORMAT="$new_format"
+        export LOG_FORMAT
+        echo "✅ Log format set to: $new_format"
+        ;;
+      *)
+        echo "❌ Invalid log format: $new_format"
+        echo "Available formats: standard, json, structured"
+        return 1
+        ;;
+      esac
+    fi
+    ;;
+  *)
+    echo "Usage: serversentry logging [subcommand] [options]"
+    echo ""
+    echo "Subcommands:"
+    echo "  status              Show logging system status"
+    echo "  health              Check logging system health"
+    echo "  rotate              Rotate log files manually"
+    echo "  cleanup [days]      Clean up old log archives (default: 30 days)"
+    echo "  level [level]       Get/set log level (debug, info, warning, error, critical)"
+    echo "  test                Test all logging functions"
+    echo "  config              Show logging configuration"
+    echo "  tail [type] [lines] View recent log entries (default: main, 50 lines)"
+    echo "  follow [type]       Follow log file in real-time (default: main)"
+    echo "  format [format]     Get/set log format (standard, json, structured)"
+    echo ""
+    echo "Log Types (for tail/follow):"
+    echo "  main                Main application log"
+    echo "  performance         Performance metrics log"
+    echo "  error               Error and critical messages log"
+    echo "  audit               Audit trail log"
+    echo "  security            Security events log"
+    echo ""
+    echo "Examples:"
+    echo "  serversentry logging status"
+    echo "  serversentry logging health"
+    echo "  serversentry logging level debug"
+    echo "  serversentry logging tail error 100"
+    echo "  serversentry logging follow performance"
+    echo "  serversentry logging format json"
+    return 1
+    ;;
+  esac
+}
+
+# === PLUGIN INTERFACE FUNCTIONS ===
+# These functions provide a clean interface to the plugin system
+
+# Function: run_all_plugin_checks
+# Description: Run checks for all loaded plugins
+# Returns:
+#   JSON results via stdout
+run_all_plugin_checks() {
+  plugin_run_all_checks
+}
+
+# Function: is_plugin_registered
+# Description: Check if a plugin is registered and loaded
+# Parameters:
+#   $1 - plugin name
+# Returns:
+#   0 - plugin is registered
+#   1 - plugin is not registered
+is_plugin_registered() {
+  local plugin_name="$1"
+  plugin_is_loaded "$plugin_name"
+}
+
+# Function: list_plugins
+# Description: List all loaded plugins with their information
+# Returns:
+#   Plugin list via stdout
+list_plugins() {
+  plugin_list_loaded
+}
+
+# Function: run_plugin_check
+# Description: Run a check for a specific plugin
+# Parameters:
+#   $1 - plugin name
+# Returns:
+#   JSON result via stdout
+run_plugin_check() {
+  local plugin_name="$1"
+  plugin_run_check "$plugin_name"
 }

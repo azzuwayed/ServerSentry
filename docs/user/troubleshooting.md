@@ -15,11 +15,22 @@ serversentry diagnostics run
 # Check system status
 serversentry status
 
-# View recent logs
-serversentry logs view
+# Check logging system health
+serversentry logging health
+
+# View recent logs (specialized)
+serversentry logging tail main 50       # Main application log
+serversentry logging tail error 20      # Error log only
+serversentry logging tail audit 10      # Recent user actions
+
+# Follow logs in real-time
+serversentry logging follow performance  # Performance monitoring
 
 # Check configuration validity
 serversentry list-thresholds
+
+# Test all logging functions
+serversentry logging test
 ```
 
 ## Installation Issues
@@ -562,22 +573,34 @@ detect_spikes=false
 
 - Disk space issues
 - Large log files affecting performance
+- Log partition full warnings
 
 **Solutions:**
 
 ```bash
-# Clean up old logs
-serversentry logs cleanup
+# Check current log system status
+serversentry logging status
 
-# Configure log rotation
-# Edit config/serversentry.yaml:
-system:
-  max_log_size: 5242880    # 5MB
-  max_log_archives: 5
+# Check logging system health
+serversentry logging health
 
-# Manual log cleanup
-find logs/ -name "*.log" -size +100M -delete
-find logs/ -name "*.log.*" -mtime +30 -delete
+# Manually rotate logs
+serversentry logging rotate
+
+# Clean up old log archives
+serversentry logging cleanup 30    # Keep last 30 days
+
+# Configure automatic rotation in config/serversentry.yaml:
+logging:
+  file:
+    max_size: 5242880         # 5MB per file
+    max_archives: 5           # Keep 5 archives
+    compression: true         # Enable compression
+
+  # Archive management
+  archive:
+    retention_days: 30        # Auto-cleanup after 30 days
+    cleanup_on_startup: true  # Clean on restart
 ```
 
 ### 2. Missing Log Entries
@@ -586,20 +609,110 @@ find logs/ -name "*.log.*" -mtime +30 -delete
 
 - No recent entries in logs
 - Missing error messages
+- Debug information not appearing
 
 **Solutions:**
 
 ```bash
-# Check log level
-serversentry list-thresholds | grep log_level
+# Check current log level
+serversentry logging level
 
-# Increase log verbosity
-serversentry update-threshold log_level=debug
+# Increase log verbosity temporarily
+serversentry logging level debug
+
+# Test logging system
+serversentry logging test
+
+# Check specialized logs
+serversentry logging tail error 50      # View error log
+serversentry logging tail audit 20      # View audit log
+serversentry logging tail security 10   # View security log
 
 # Check file permissions
 ls -la logs/
 chmod 755 logs/
 chmod 644 logs/*.log
+
+# View logging configuration
+serversentry logging config
+```
+
+### 3. Log Format Issues
+
+**Symptoms:**
+
+- Unreadable log format
+- JSON parsing errors
+- Missing structured data
+
+**Solutions:**
+
+```bash
+# Check current log format
+serversentry logging format
+
+# Switch to standard format
+serversentry logging format standard
+
+# Enable JSON for log analysis tools
+serversentry logging format json
+
+# Configure in serversentry.yaml:
+logging:
+  global:
+    output_format: standard        # or json, structured
+    timestamp_format: "%Y-%m-%d %H:%M:%S"
+    include_caller: true          # For debugging
+```
+
+### 4. Component-Specific Log Issues
+
+**Symptoms:**
+
+- Too much plugin debug output
+- Missing notification logs
+- Security events not logged
+
+**Solutions:**
+
+```bash
+# Configure component-specific levels in serversentry.yaml:
+logging:
+  components:
+    plugins: warning      # Reduce plugin verbosity
+    notifications: info   # Enable notification logs
+    security: debug       # Increase security logging
+    performance: info     # Enable performance logs
+
+# View specialized logs
+serversentry logging tail performance 50
+serversentry logging follow security    # Real-time monitoring
+```
+
+### 5. Log Monitoring and Alerts
+
+**Symptoms:**
+
+- Unable to monitor log health
+- No alerts for log issues
+
+**Solutions:**
+
+```bash
+# Enable log system monitoring in serversentry.yaml:
+logging:
+  advanced:
+    monitoring:
+      enabled: true
+      self_check_interval: 300     # Check every 5 minutes
+      disk_usage_threshold: 85     # Alert at 85% usage
+      file_handle_threshold: 80    # Alert at 80% handles
+
+# Manual health checks
+serversentry logging health
+
+# Check disk usage
+df -h logs/
 ```
 
 ## Performance Issues

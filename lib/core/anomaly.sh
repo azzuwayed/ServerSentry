@@ -209,19 +209,19 @@ detect_statistical_anomaly() {
   local anomaly_score=0
 
   # Z-score calculation
-  if [ "$(echo "$std_dev > 0" | bc 2>/dev/null || echo "0")" -eq 1 ]; then
+  if [[ $(echo "$std_dev > 0" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
     local z_score
     z_score=$(echo "scale=2; ($current_value - $mean) / $std_dev" | bc 2>/dev/null || echo "0")
     local abs_z_score
     abs_z_score=$(echo "$z_score" | sed 's/-//')
 
     # Check if anomaly based on sensitivity threshold
-    if [ "$(echo "$abs_z_score > $sensitivity" | bc 2>/dev/null || echo "0")" -eq 1 ]; then
+    if [[ $(echo "$abs_z_score > $sensitivity" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
       is_anomaly=true
       anomaly_score="$z_score"
 
       # Determine anomaly type
-      if [ "$(echo "$z_score > 0" | bc 2>/dev/null || echo "0")" -eq 1 ]; then
+      if [[ $(echo "$z_score > 0" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
         anomaly_type="high_outlier"
       else
         anomaly_type="low_outlier"
@@ -385,15 +385,15 @@ detect_spike_anomaly() {
   recent_mean=$(echo "$recent_values" | awk '{sum+=$1} END {print sum/NR}')
 
   # Check if current value is significantly different from recent pattern
-  if [ "$(echo "$std_dev > 0" | bc 2>/dev/null || echo "0")" -eq 1 ]; then
+  if [[ $(echo "$std_dev > 0" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
     local spike_threshold
     spike_threshold=$(echo "scale=2; $std_dev * 3" | bc 2>/dev/null || echo "0")
 
     local value_diff
     value_diff=$(echo "scale=2; $current_value - $recent_mean" | bc 2>/dev/null | sed 's/-//')
 
-    if [ "$(echo "$value_diff > $spike_threshold" | bc 2>/dev/null || echo "0")" -eq 1 ]; then
-      if [ "$(echo "$current_value > $recent_mean" | bc 2>/dev/null || echo "0")" -eq 1 ]; then
+    if [[ $(echo "$value_diff > $spike_threshold" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
+      if [[ $(echo "$current_value > $recent_mean" | bc 2>/dev/null || echo "0") -eq 1 ]]; then
         echo "positive_spike"
       else
         echo "negative_spike"
@@ -639,7 +639,6 @@ anomaly_send_notification() {
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f anomaly_system_init
   export -f anomaly_create_default_config
-  export -f anomaly_load_config
   export -f store_metric_data
   export -f detect_statistical_anomaly
   export -f detect_trend_anomaly
