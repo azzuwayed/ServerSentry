@@ -78,6 +78,15 @@ $RECYCLE.BIN/
 /testing/
 /temp/
 /tmp/
+# Ignore tmp folders in all subdirectories
+**/tmp/
+# Ignore specific temporary files
+tmp/*
+*/tmp/*
+# Plugin temporary files
+**/plugin_func_*
+**/plugin_loaded_*
+**/plugin_meta_*
 
 #-------------------------------------------------
 # Distribution and packaging
@@ -94,4 +103,4 @@ build/
 # Backup files
 *.bak
 *.backup
-*-old 
+*-old
