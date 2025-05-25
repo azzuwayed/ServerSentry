@@ -178,7 +178,69 @@ compat_get_package_manager() {
   echo "$COMPAT_PACKAGE_MANAGER"
 }
 
+# Function: compat_get_bash_path
+# Description: Get detected bash path
+compat_get_bash_path() {
+  echo "$COMPAT_BASH_PATH"
+}
+
+# Function: compat_get_bash_version
+# Description: Get detected bash version
+compat_get_bash_version() {
+  echo "$COMPAT_BASH_VERSION"
+}
+
+# Function: compat_bash_is_compatible
+# Description: Check if bash version is compatible (4.0+)
+# Returns:
+#   0 - compatible
+#   1 - not compatible
+compat_bash_is_compatible() {
+  if [[ -n "$COMPAT_BASH_VERSION" && "$COMPAT_BASH_VERSION" != "unknown" ]]; then
+    local major
+    major=$(echo "$COMPAT_BASH_VERSION" | cut -d. -f1)
+    [[ "$major" -ge 4 ]]
+  else
+    return 1
+  fi
+}
+
 # === CROSS-PLATFORM FILE OPERATIONS ===
+
+# Function: compat_mkdir
+# Description: Create directory with permissions across platforms
+# Parameters:
+#   $1 - directory path
+#   $2 - permissions (optional, defaults to 755)
+# Returns:
+#   0 - success
+#   1 - failure
+compat_mkdir() {
+  local dir="$1"
+  local permissions="${2:-755}"
+
+  if mkdir -p "$dir" 2>/dev/null; then
+    chmod "$permissions" "$dir" 2>/dev/null
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Function: compat_chmod
+# Description: Change file permissions across platforms
+# Parameters:
+#   $1 - permissions
+#   $2 - file/directory path
+# Returns:
+#   0 - success
+#   1 - failure
+compat_chmod() {
+  local permissions="$1"
+  local path="$2"
+
+  chmod "$permissions" "$path" 2>/dev/null
+}
 
 # Function: compat_sed_inplace
 # Description: Cross-platform sed in-place editing
@@ -502,6 +564,11 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f compat_get_os
   export -f compat_get_os_version
   export -f compat_get_package_manager
+  export -f compat_get_bash_path
+  export -f compat_get_bash_version
+  export -f compat_bash_is_compatible
+  export -f compat_mkdir
+  export -f compat_chmod
   export -f compat_sed_inplace
   export -f compat_stat_size
   export -f compat_stat_mtime

@@ -47,44 +47,49 @@ _plugin_set_loaded() {
   local plugin_name="$1"
   local value="$2"
 
+  # Always update associative array if supported
   if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
     PLUGIN_LOADED[$plugin_name]="$value"
-  else
-    # Fallback: use a temporary file for state
-    local state_file="${BASE_DIR}/tmp/plugin_loaded_${plugin_name}"
-    mkdir -p "${BASE_DIR}/tmp" 2>/dev/null || true
-    echo "$value" >"$state_file" 2>/dev/null || true
   fi
+
+  # Always write to cache file for persistence across contexts
+  local state_file="${BASE_DIR}/tmp/plugin_loaded_${plugin_name}"
+  mkdir -p "${BASE_DIR}/tmp" 2>/dev/null || true
+  echo "$value" >"$state_file" 2>/dev/null || true
 }
 
 _plugin_get_loaded() {
   local plugin_name="$1"
 
+  local result=""
   if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
-    echo "${PLUGIN_LOADED[$plugin_name]:-}"
-  else
-    # Fallback: read from temporary file
+    result="${PLUGIN_LOADED[$plugin_name]:-}"
+  fi
+
+  # Always check temporary files as fallback (handles scope issues)
+  if [[ -z "$result" ]]; then
     local state_file="${BASE_DIR}/tmp/plugin_loaded_${plugin_name}"
     if [[ -f "$state_file" ]]; then
-      cat "$state_file" 2>/dev/null || echo ""
-    else
-      echo ""
+      result=$(cat "$state_file" 2>/dev/null || echo "")
     fi
   fi
+
+  echo "$result"
 }
 
 _plugin_set_function_status() {
   local func_name="$1"
   local status="$2"
 
+  # Always update associative array if supported
   if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
     PLUGIN_FUNCTIONS[$func_name]="$status"
-  else
-    # Fallback: use temporary file
-    local func_file="${BASE_DIR}/tmp/plugin_func_${func_name}"
-    mkdir -p "${BASE_DIR}/tmp" 2>/dev/null || true
-    echo "$status" >"$func_file" 2>/dev/null || true
   fi
+
+  # Always write to cache file for persistence across contexts
+  local func_file="${BASE_DIR}/tmp/plugin_func_${func_name}"
+  mkdir -p "${BASE_DIR}/tmp" 2>/dev/null || true
+  echo "$status" >"$func_file" 2>/dev/null || true
 }
 
 _plugin_get_function_status() {
@@ -107,30 +112,34 @@ _plugin_set_metadata() {
   local plugin_name="$1"
   local metadata="$2"
 
+  # Always update associative array if supported
   if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
     PLUGIN_METADATA[$plugin_name]="$metadata"
-  else
-    # Fallback: use temporary file
-    local meta_file="${BASE_DIR}/tmp/plugin_meta_${plugin_name}"
-    mkdir -p "${BASE_DIR}/tmp" 2>/dev/null || true
-    echo "$metadata" >"$meta_file" 2>/dev/null || true
   fi
+
+  # Always write to cache file for persistence across contexts
+  local meta_file="${BASE_DIR}/tmp/plugin_meta_${plugin_name}"
+  mkdir -p "${BASE_DIR}/tmp" 2>/dev/null || true
+  echo "$metadata" >"$meta_file" 2>/dev/null || true
 }
 
 _plugin_get_metadata() {
   local plugin_name="$1"
 
+  local result=""
   if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
-    echo "${PLUGIN_METADATA[$plugin_name]:-}"
-  else
-    # Fallback: read from temporary file
+    result="${PLUGIN_METADATA[$plugin_name]:-}"
+  fi
+
+  # Always check temporary files as fallback (handles scope issues)
+  if [[ -z "$result" ]]; then
     local meta_file="${BASE_DIR}/tmp/plugin_meta_${plugin_name}"
     if [[ -f "$meta_file" ]]; then
-      cat "$meta_file" 2>/dev/null || echo ""
-    else
-      echo ""
+      result=$(cat "$meta_file" 2>/dev/null || echo "")
     fi
   fi
+
+  echo "$result"
 }
 
 # New standardized function: plugin_system_init
@@ -168,10 +177,13 @@ plugin_system_init() {
     PLUGIN_CHECK_COUNTS=()
     PLUGIN_ERROR_COUNTS=()
     PLUGIN_LAST_CHECK=()
-  else
-    # Clear fallback state files for bash 3.x
-    rm -f "${BASE_DIR}/tmp/plugin_"* 2>/dev/null || true
   fi
+
+  # Always clear cache files (handles scope issues and ensures clean state)
+  log_debug "Clearing plugin cache files" "plugins"
+  rm -f "${BASE_DIR}/tmp/plugin_"* 2>/dev/null || true
+
+  # Clear registered plugins array
   registered_plugins=()
 
   # Load plugin registry for performance tracking
@@ -398,6 +410,19 @@ plugin_run_check() {
     return 1
   fi
 
+  # Ensure plugin functions are available (re-source if needed)
+  if ! declare -f "${plugin_name}_plugin_check" >/dev/null 2>&1; then
+    log_debug "Plugin functions not available, re-sourcing plugin: $plugin_name"
+    local plugin_path="${PLUGIN_DIR}/${plugin_name}/${plugin_name}.sh"
+    if [[ -f "$plugin_path" ]]; then
+      # shellcheck source=/dev/null
+      source "$plugin_path"
+    else
+      log_error "Plugin file not found: $plugin_path"
+      return 1
+    fi
+  fi
+
   # Run the plugin check with performance measurement
   log_debug "Running check for plugin: $plugin_name" >&2
 
@@ -427,6 +452,12 @@ plugin_run_check() {
 
   # Clean up temp files
   rm -f "$temp_output" "$temp_error" 2>/dev/null
+
+  # Workaround: Fix extra closing brace issue if present
+  if [[ "$result" =~ \}\}\}$ ]]; then
+    result="${result%?}" # Remove the last character (extra brace)
+    log_debug "Fixed extra closing brace in plugin result" "plugins"
+  fi
 
   end_time=$(date +%s.%N 2>/dev/null || date +%s)
 
@@ -516,12 +547,49 @@ plugin_is_loaded() {
 plugin_list_loaded() {
   log_debug "Listing loaded plugins"
 
-  if [[ "${#registered_plugins[@]}" -eq 0 ]]; then
+  local loaded_plugins=()
+
+  # Debug: Log the state of arrays and variables
+  log_debug "registered_plugins count: ${#registered_plugins[@]}"
+  log_debug "ASSOCIATIVE_ARRAYS_SUPPORTED: $ASSOCIATIVE_ARRAYS_SUPPORTED"
+  if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
+    log_debug "PLUGIN_LOADED array count: ${#PLUGIN_LOADED[@]}"
+  fi
+
+  # First try to use the registered_plugins array
+  if [[ "${#registered_plugins[@]}" -gt 0 ]]; then
+    log_debug "Using registered_plugins array"
+    loaded_plugins=("${registered_plugins[@]}")
+  elif [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
+    # Fallback: check associative arrays for loaded plugins
+    log_debug "Using PLUGIN_LOADED associative array"
+    for plugin in "${!PLUGIN_LOADED[@]}"; do
+      if [[ "${PLUGIN_LOADED[$plugin]}" == "true" ]]; then
+        loaded_plugins+=("$plugin")
+      fi
+    done
+  fi
+
+  # Always check temporary files as final fallback (handles scope issues)
+  if [[ "${#loaded_plugins[@]}" -eq 0 ]]; then
+    log_debug "Using temporary files fallback"
+    for state_file in "${BASE_DIR}/tmp/plugin_loaded_"*; do
+      if [[ -f "$state_file" && "$(cat "$state_file" 2>/dev/null)" == "true" ]]; then
+        local plugin_name
+        plugin_name=$(basename "$state_file" | sed 's/^plugin_loaded_//')
+        loaded_plugins+=("$plugin_name")
+      fi
+    done
+  fi
+
+  log_debug "Final loaded_plugins count: ${#loaded_plugins[@]}"
+
+  if [[ "${#loaded_plugins[@]}" -eq 0 ]]; then
     echo "No plugins loaded"
     return 0
   fi
 
-  for plugin_name in "${registered_plugins[@]}"; do
+  for plugin_name in "${loaded_plugins[@]}"; do
     local plugin_info
     plugin_info="$(_plugin_get_metadata "$plugin_name")"
     if [[ -z "$plugin_info" ]]; then
@@ -543,7 +611,32 @@ plugin_run_all_checks() {
 
   log_debug "Running checks for all loaded plugins"
 
-  for plugin_name in "${registered_plugins[@]}"; do
+  local loaded_plugins=()
+
+  # First try to use the registered_plugins array
+  if [[ "${#registered_plugins[@]}" -gt 0 ]]; then
+    loaded_plugins=("${registered_plugins[@]}")
+  elif [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
+    # Fallback: check associative arrays for loaded plugins
+    for plugin in "${!PLUGIN_LOADED[@]}"; do
+      if [[ "${PLUGIN_LOADED[$plugin]}" == "true" ]]; then
+        loaded_plugins+=("$plugin")
+      fi
+    done
+  fi
+
+  # Always check temporary files as final fallback (handles scope issues)
+  if [[ "${#loaded_plugins[@]}" -eq 0 ]]; then
+    for state_file in "${BASE_DIR}/tmp/plugin_loaded_"*; do
+      if [[ -f "$state_file" && "$(cat "$state_file" 2>/dev/null)" == "true" ]]; then
+        local plugin_name
+        plugin_name=$(basename "$state_file" | sed 's/^plugin_loaded_//')
+        loaded_plugins+=("$plugin_name")
+      fi
+    done
+  fi
+
+  for plugin_name in "${loaded_plugins[@]}"; do
     local result
     if result=$(plugin_run_check "$plugin_name" "$send_notifications"); then
       # Add to results array
@@ -868,6 +961,35 @@ plugin_cleanup_performance_logs() {
   return 0
 }
 
+# Function: plugin_clear_cache
+# Description: Clear all plugin cache files and reset state
+# Returns:
+#   0 - success
+plugin_clear_cache() {
+  log_info "Clearing all plugin cache and state" "plugins"
+
+  # Clear temporary files
+  rm -f "${BASE_DIR}/tmp/plugin_"* 2>/dev/null || true
+
+  # Clear in-memory arrays if supported
+  if [[ "$ASSOCIATIVE_ARRAYS_SUPPORTED" == "true" ]]; then
+    PLUGIN_LOADED=()
+    PLUGIN_FUNCTIONS=()
+    PLUGIN_METADATA=()
+    PLUGIN_PERFORMANCE_STATS=()
+    PLUGIN_LOAD_TIMES=()
+    PLUGIN_CHECK_COUNTS=()
+    PLUGIN_ERROR_COUNTS=()
+    PLUGIN_LAST_CHECK=()
+  fi
+
+  # Clear registered plugins array
+  registered_plugins=()
+
+  log_info "Plugin cache cleared successfully" "plugins"
+  return 0
+}
+
 # Export standardized functions
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f plugin_system_init
@@ -884,5 +1006,6 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   export -f plugin_get_performance_stats
   export -f plugin_optimize_loading
   export -f plugin_cleanup_performance_logs
+  export -f plugin_clear_cache
 
 fi

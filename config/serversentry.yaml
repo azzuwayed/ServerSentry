@@ -4,7 +4,7 @@
 # Core System Settings
 system:
   enabled: true
-  log_level: info
+  log_level: debug
   check_interval: 60
   check_timeout: 30
   max_log_size: 10485760 # 10MB
@@ -15,7 +15,7 @@ logging:
   # Global Log Settings
   global:
     enabled: true
-    default_level: info
+    default_level: debug
     output_format: standard # standard, json, structured
     timestamp_format: "%Y-%m-%d %H:%M:%S"
     include_caller: false # Include function/line info in logs

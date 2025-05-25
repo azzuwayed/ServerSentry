@@ -37,6 +37,7 @@ Commands:
   list-thresholds     List all thresholds and configuration
   monitor             Run continuous monitoring daemon
   logging             Manage logging system (status, health, rotate, config)
+  clear-cache         Clear all plugin cache and temporary files
 
 Options:
   -v, --verbose       Enable verbose output
@@ -78,7 +79,7 @@ process_commands() {
       exit 0
       ;;
     # Commands
-    status | start | stop | check | list | configure | logs | version | help | tui | webhook | template | update-threshold | list-thresholds | composite | anomaly | reload | diagnostics | monitor | logging)
+    status | start | stop | check | list | configure | logs | version | help | tui | webhook | template | update-threshold | list-thresholds | composite | anomaly | reload | diagnostics | monitor | logging | clear-cache)
       command="$1"
       shift
       break
@@ -160,6 +161,9 @@ process_commands() {
   logging)
     cmd_logging "$@"
     ;;
+  clear-cache)
+    cmd_clear_cache "$@"
+    ;;
   *)
     log_error "Unknown command: $command" "cli"
     show_help
@@ -194,38 +198,42 @@ cmd_status() {
   results=$(run_all_plugin_checks)
 
   # Parse and display results with colors
-  if util_command_exists jq && [[ -n "$results" ]]; then
-    echo "$results" | jq -r '.[] | "\(.plugin)|\(.status_code)|\(.status_message)|\(.metrics.usage_percent // "N/A")|\(.metrics.threshold // "N/A")"' | while IFS='|' read -r plugin status_code message value threshold; do
-      if [[ -n "$plugin" ]]; then
-        case "$status_code" in
-        0)
-          print_status "ok" "$plugin: $message"
-          if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
-            create_metric_bar "$value" "$threshold" "  └─ Usage"
-          fi
-          ;;
-        1)
-          print_status "warning" "$plugin: $message"
-          if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
-            create_metric_bar "$value" "$threshold" "  └─ Usage"
-          fi
-          ;;
-        2)
-          print_status "error" "$plugin: $message"
-          if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
-            create_metric_bar "$value" "$threshold" "  └─ Usage"
-          fi
-          ;;
-        *)
-          print_status "info" "$plugin: $message"
-          ;;
-        esac
-      fi
-    done
+  if [[ -n "$results" ]]; then
+    if util_command_exists jq; then
+      echo "$results" | jq -r '.[] | "\(.plugin)|\(.status_code)|\(.status_message)|\(.metrics.usage_percent // "N/A")|\(.metrics.threshold // "N/A")"' | while IFS='|' read -r plugin status_code message value threshold; do
+        if [[ -n "$plugin" ]]; then
+          case "$status_code" in
+          0)
+            print_status "ok" "$plugin: $message"
+            if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
+              create_metric_bar "$value" "$threshold" "  └─ Usage"
+            fi
+            ;;
+          1)
+            print_status "warning" "$plugin: $message"
+            if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
+              create_metric_bar "$value" "$threshold" "  └─ Usage"
+            fi
+            ;;
+          2)
+            print_status "error" "$plugin: $message"
+            if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
+              create_metric_bar "$value" "$threshold" "  └─ Usage"
+            fi
+            ;;
+          *)
+            print_status "info" "$plugin: $message"
+            ;;
+          esac
+        fi
+      done
+    else
+      # Fallback display without jq
+      log_warning "jq not available, using fallback display" "cli"
+      echo "$results"
+    fi
   else
-    # Fallback display without jq
-    log_warning "jq not available, using fallback display" "cli"
-    echo "$results"
+    echo "No plugin results available"
   fi
 
   print_separator
@@ -1398,6 +1406,42 @@ cmd_logging() {
     return 1
     ;;
   esac
+}
+
+# Command: clear-cache
+cmd_clear_cache() {
+  echo "Clearing all plugin cache and temporary files..."
+  log_audit "clear_cache" "${USER:-unknown}" "User requested cache clearing via CLI"
+
+  # Clear plugin cache if function is available
+  if declare -f plugin_clear_cache >/dev/null 2>&1; then
+    if plugin_clear_cache; then
+      echo "✅ Plugin cache cleared successfully"
+    else
+      echo "❌ Failed to clear plugin cache"
+      return 1
+    fi
+  else
+    echo "❌ Plugin cache clearing function not available"
+    return 1
+  fi
+
+  # Also clear any command cache if available
+  if declare -f util_command_cache_cleanup >/dev/null 2>&1; then
+    util_command_cache_cleanup
+    echo "✅ Command cache cleared"
+  fi
+
+  # Clear any temporary files in the base temp directory
+  local temp_files_count
+  temp_files_count=$(find "${BASE_DIR}/tmp" -name "*.tmp" -o -name "temp_*" -o -name "*_temp" 2>/dev/null | wc -l)
+  if [[ "$temp_files_count" -gt 0 ]]; then
+    find "${BASE_DIR}/tmp" -name "*.tmp" -o -name "temp_*" -o -name "*_temp" -delete 2>/dev/null || true
+    echo "✅ Cleaned up $temp_files_count temporary files"
+  fi
+
+  echo ""
+  echo "Cache clearing completed. You may want to run 'serversentry list' to verify plugins reload correctly."
 }
 
 # === PLUGIN INTERFACE FUNCTIONS ===

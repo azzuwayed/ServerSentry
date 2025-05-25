@@ -54,17 +54,23 @@ cpu_plugin_configure() {
 cpu_plugin_check() {
   local cpu_usage
   local load_avg
-  local status="OK"
-  local message=""
-  local details=""
+  local status_code=0
+  local status_message=""
 
   # Get CPU usage
   cpu_usage=$(get_cpu_usage)
   if [[ $? -ne 0 || -z "$cpu_usage" ]]; then
-    status="ERROR"
-    message="Failed to retrieve CPU usage"
-    echo "STATUS=$status"
-    echo "MESSAGE=$message"
+    status_code=2
+    status_message="Failed to retrieve CPU usage"
+
+    # Create error JSON using utility function
+    if declare -f util_json_create_status_object >/dev/null 2>&1; then
+      local metrics='{"usage_percent":"N/A","threshold":'$CPU_THRESHOLD',"warning_threshold":'$CPU_WARNING_THRESHOLD',"load_average":"N/A"}'
+      util_json_create_status_object "$status_code" "$status_message" "cpu" "$metrics"
+    else
+      # Fallback JSON format
+      echo '{"status_code":'$status_code',"status_message":"'"$status_message"'","plugin":"cpu","timestamp":"'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'","metrics":{"usage_percent":"N/A","threshold":'$CPU_THRESHOLD',"warning_threshold":'$CPU_WARNING_THRESHOLD',"load_average":"N/A"}}'
+    fi
     return 1
   fi
 
@@ -77,27 +83,26 @@ cpu_plugin_check() {
   # Determine status based on thresholds
   local cpu_int=${cpu_usage%.*} # Remove decimal part for comparison
   if [[ "$cpu_int" -ge "$CPU_THRESHOLD" ]]; then
-    status="CRITICAL"
-    message="High CPU usage: ${cpu_usage}%"
+    status_code=2
+    status_message="High CPU usage: ${cpu_usage}%"
   elif [[ "$cpu_int" -ge "$CPU_WARNING_THRESHOLD" ]]; then
-    status="WARNING"
-    message="Elevated CPU usage: ${cpu_usage}%"
+    status_code=1
+    status_message="Elevated CPU usage: ${cpu_usage}%"
   else
-    status="OK"
-    message="CPU usage normal: ${cpu_usage}%"
+    status_code=0
+    status_message="CPU usage normal: ${cpu_usage}%"
   fi
 
-  # Add load average information
-  details="CPU Usage: ${cpu_usage}%, Load Average: ${load_avg}"
+  # Create metrics object
+  local metrics='{"usage_percent":'$cpu_usage',"threshold":'$CPU_THRESHOLD',"warning_threshold":'$CPU_WARNING_THRESHOLD',"load_average":'$load_avg'}'
 
-  # Output results
-  echo "STATUS=$status"
-  echo "MESSAGE=$message"
-  echo "VALUE=$cpu_usage"
-  echo "LOAD_AVERAGE=$load_avg"
-  echo "THRESHOLD=$CPU_THRESHOLD"
-  echo "WARNING_THRESHOLD=$CPU_WARNING_THRESHOLD"
-  echo "DETAILS=$details"
+  # Output JSON result
+  if declare -f util_json_create_status_object >/dev/null 2>&1; then
+    util_json_create_status_object "$status_code" "$status_message" "cpu" "$metrics"
+  else
+    # Fallback JSON format
+    echo '{"status_code":'$status_code',"status_message":"'"$status_message"'","plugin":"cpu","timestamp":"'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'","metrics":'"$metrics"'}'
+  fi
 
   return 0
 }
@@ -107,10 +112,8 @@ get_cpu_usage() {
   local cpu_usage
 
   # Try different methods based on OS and available tools
-  if util_command_exists iostat; then
-    # Use iostat if available (most accurate)
-    cpu_usage=$(iostat -c 1 2 2>/dev/null | tail -1 | awk '{print 100 - $6}' 2>/dev/null)
-  elif util_command_exists top; then
+  # Skip iostat on macOS as it can hang, use top instead
+  if util_command_exists top; then
     # Fallback to top command
     case "$(uname -s)" in
     Darwin*)

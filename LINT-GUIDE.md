@@ -20,15 +20,15 @@ A comprehensive guide for maintaining high-quality bash scripts in the ServerSen
 
 ## 📋 Table of Contents
 
-- [Tools Overview](#-tools-overview)
-- [Quick Commands](#-quick-commands)
-- [Advanced Usage](#-advanced-usage)
-- [Configuration](#-configuration)
-- [VS Code Integration](#-vs-code-integration)
-- [Common Issues & Fixes](#-common-issues--fixes)
-- [Best Practices](#-best-practices)
-- [Workflow Guidelines](#-workflow-guidelines)
-- [Troubleshooting](#-troubleshooting)
+- [Tools Overview](#tools-overview)
+- [Quick Commands](#quick-commands)
+- [Advanced Usage](#advanced-usage)
+- [Configuration](#configuration)
+- [VS Code Integration](#vs-code-integration)
+- [Common Issues & Fixes](#common-issues--fixes)
+- [Best Practices](#best-practices)
+- [Workflow Guidelines](#workflow-guidelines)
+- [Troubleshooting](#troubleshooting)
 
 ## 🛠 Tools Overview
 
@@ -349,6 +349,7 @@ done
 ### For New Scripts
 
 1. **Start with template**:
+
    ```bash
    #!/usr/bin/env bash
    set -euo pipefail
@@ -359,11 +360,13 @@ done
    - Run `./check-lint.sh script.sh` frequently
 
 3. **Format regularly**:
+
    ```bash
    shfmt -w -i 2 -ci -sr script.sh
    ```
 
 4. **Final check**:
+
    ```bash
    ./check-lint.sh script.sh
    ```
@@ -371,17 +374,20 @@ done
 ### For Existing Scripts
 
 1. **Analyze current state**:
+
    ```bash
    ./check-lint.sh --verbose
    ```
 
 2. **Apply automatic fixes**:
+
    ```bash
    ./fix-lint.sh --dry-run  # Preview first
    ./fix-lint.sh            # Apply fixes
    ```
 
 3. **Review and test**:
+
    ```bash
    ./check-lint.sh          # Verify fixes
    # Test script functionality
@@ -523,10 +529,10 @@ To add new fix types to `fix-lint.sh`:
 
 # Makefile target
 lint:
-	./check-lint.sh
+./check-lint.sh
 
 fix:
-	./fix-lint.sh --force
+./fix-lint.sh --force
 
 # GitHub Actions
 - name: Lint bash scripts
@@ -575,4 +581,4 @@ You now have a **professional-grade bash development environment** with:
 
 ---
 
-*Last updated: Version 3.0 - Enhanced tools with intelligent fixing and comprehensive reporting*
+Last updated: Version 3.0 - Enhanced tools with intelligent fixing and comprehensive reporting

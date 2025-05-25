@@ -82,7 +82,16 @@ memory_plugin_check() {
   else
     # Fallback to OS-specific methods
     local os_type
-    os_type=$(compat_get_os)
+    if declare -f compat_get_os >/dev/null 2>&1; then
+      os_type=$(compat_get_os)
+    else
+      # Fallback OS detection
+      case "$(uname -s)" in
+      Darwin*) os_type="macos" ;;
+      Linux*) os_type="linux" ;;
+      *) os_type="unknown" ;;
+      esac
+    fi
 
     case "$os_type" in
     linux)
@@ -239,31 +248,19 @@ memory_plugin_check() {
     fi
   fi
 
-  # Get timestamp
-  local timestamp
-  timestamp=$(get_timestamp)
+  # Create metrics JSON with proper quoting for string values
+  local usage_value="${result:-0}"
+  if [[ "$usage_value" == "unknown" ]]; then
+    usage_value='"unknown"'
+  fi
 
-  # Return standardized output format
-  cat <<EOF
-{
-  "plugin": "memory",
-  "status_code": ${status_code},
-  "status_message": "${status_message}",
-  "metrics": {
-    "usage_percent": ${result:-0},
-    "total_memory": ${total_memory:-0},
-    "used_memory": ${used_memory:-0},
-    "free_memory": ${free_memory:-0},
-    "total_memory_human": "${total_memory_human:-0B}",
-    "used_memory_human": "${used_memory_human:-0B}",
-    "free_memory_human": "${free_memory_human:-0B}",
-    "threshold": ${memory_threshold},
-    "warning_threshold": ${memory_warning_threshold},
-    "swap_total": ${swap_total:-0},
-    "swap_used": ${swap_used:-0},
-    "swap_percent": ${swap_percent:-0}
-  },
-  "timestamp": "${timestamp}"
-}
-EOF
+  local metrics='{"usage_percent":'$usage_value',"total_memory":'${total_memory:-0}',"used_memory":'${used_memory:-0}',"free_memory":'${free_memory:-0}',"total_memory_human":"'${total_memory_human:-0B}'","used_memory_human":"'${used_memory_human:-0B}'","free_memory_human":"'${free_memory_human:-0B}'","threshold":'${memory_threshold}',"warning_threshold":'${memory_warning_threshold}',"swap_total":'${swap_total:-0}',"swap_used":'${swap_used:-0}',"swap_percent":'${swap_percent:-0}'}'
+
+  # Use standardized JSON creation function if available
+  if declare -f util_json_create_status_object >/dev/null 2>&1; then
+    util_json_create_status_object "$status_code" "$status_message" "memory" "$metrics"
+  else
+    # Fallback JSON format
+    echo '{"status_code":'$status_code',"status_message":"'"$status_message"'","plugin":"memory","timestamp":"'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'","metrics":'"$metrics"'}'
+  fi
 }

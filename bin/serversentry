@@ -180,13 +180,13 @@ display_system_status() {
 
 # Main function with enhanced error handling and proper initialization
 main() {
-  log_debug "Starting ServerSentry v2"
-
   # Initialize core system components in proper order
   if ! init_core_system; then
     echo "FATAL: Core system initialization failed" >&2
     exit 1
   fi
+
+  log_debug "Starting ServerSentry v2"
 
   # Initialize plugin system
   if ! init_plugin_system; then

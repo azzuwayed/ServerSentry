@@ -96,7 +96,9 @@ util_command_exists_bulk() {
   done
 
   if [[ ${#missing_commands[@]} -gt 0 ]]; then
-    log_debug "Missing commands: ${missing_commands[*]}" "command_utils"
+    if declare -f log_debug >/dev/null 2>&1; then
+      log_debug "Missing commands: ${missing_commands[*]}" "command_utils"
+    fi
     return 1
   fi
 
@@ -207,7 +209,9 @@ util_execute_with_retry() {
     fi
 
     if [[ $attempt -lt $max_attempts ]]; then
-      log_debug "Command failed, retrying in ${delay}s (attempt $attempt/$max_attempts)" "command_utils"
+      if declare -f log_debug >/dev/null 2>&1; then
+        log_debug "Command failed, retrying in ${delay}s (attempt $attempt/$max_attempts)" "command_utils"
+      fi
       sleep "$delay"
     fi
 
@@ -296,7 +300,9 @@ util_install_package() {
     apk add "$package"
     ;;
   *)
-    log_error "Cannot install package: unknown package manager" "command_utils"
+    if declare -f log_error >/dev/null 2>&1; then
+      log_error "Cannot install package: unknown package manager" "command_utils"
+    fi
     return 1
     ;;
   esac
@@ -328,7 +334,7 @@ util_command_cache_cleanup() {
     fi
   done
 
-  if [[ $cleaned_count -gt 0 ]]; then
+  if [[ $cleaned_count -gt 0 ]] && declare -f log_debug >/dev/null 2>&1; then
     log_debug "Cleaned up $cleaned_count expired command cache entries" "command_utils"
   fi
 
@@ -386,7 +392,9 @@ util_command_cache_clear() {
     unset COMMAND_CACHE_TIMESTAMPS["$key"]
   done
 
-  log_debug "Cleared $cleared_count command cache entries" "command_utils"
+  if declare -f log_debug >/dev/null 2>&1; then
+    log_debug "Cleared $cleared_count command cache entries" "command_utils"
+  fi
   return 0
 }
 
@@ -412,13 +420,16 @@ util_command_exists_cached() {
 # Returns:
 #   0 - success
 util_command_utils_init() {
-  log_debug "Initializing command utilities system" "command_utils"
+  # Only log if logging functions are available
+  if declare -f log_debug >/dev/null 2>&1; then
+    log_debug "Initializing command utilities system" "command_utils"
 
-  # Schedule periodic cache cleanup if supported
-  if [[ "$COMMAND_CACHE_SUPPORTED" == "true" ]]; then
-    log_debug "Command caching enabled with ${COMMAND_CACHE_TTL}s TTL" "command_utils"
-  else
-    log_debug "Command caching disabled (bash < 4.0)" "command_utils"
+    # Schedule periodic cache cleanup if supported
+    if [[ "$COMMAND_CACHE_SUPPORTED" == "true" ]]; then
+      log_debug "Command caching enabled with ${COMMAND_CACHE_TTL}s TTL" "command_utils"
+    else
+      log_debug "Command caching disabled (bash < 4.0)" "command_utils"
+    fi
   fi
 
   return 0

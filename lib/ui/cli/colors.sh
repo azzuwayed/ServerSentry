@@ -10,6 +10,18 @@ if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
   source "$BASE_DIR/lib/core/utils.sh"
 fi
 
+# Source command utilities directly to ensure util_command_exists is available
+if [[ -f "$BASE_DIR/lib/core/utils/command_utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils/command_utils.sh"
+fi
+
+# Fallback command existence check if util_command_exists is not available
+if ! declare -f util_command_exists >/dev/null 2>&1; then
+  util_command_exists() {
+    command -v "$1" >/dev/null 2>&1
+  }
+fi
+
 # Color detection
 init_colors() {
   # Check if terminal supports colors
@@ -275,14 +287,32 @@ create_metric_bar() {
 
   # Determine color based on threshold
   local bar_color="$GREEN"
-  if [[ "$percentage" -ge "$threshold" ]]; then
-    bar_color="$RED"
-  elif [[ "$percentage" -ge $((threshold * 80 / 100)) ]]; then
-    bar_color="$YELLOW"
+  local warning_threshold
+  if util_command_exists bc; then
+    warning_threshold=$(echo "scale=1; $threshold * 80 / 100" | bc)
+    if [[ $(echo "$percentage >= $threshold" | bc) -eq 1 ]]; then
+      bar_color="$RED"
+    elif [[ $(echo "$percentage >= $warning_threshold" | bc) -eq 1 ]]; then
+      bar_color="$YELLOW"
+    fi
+  else
+    # Fallback for systems without bc - convert to integers
+    local int_percentage=${percentage%.*}
+    local int_threshold=${threshold%.*}
+    warning_threshold=$((int_threshold * 80 / 100))
+    if [[ "$int_percentage" -ge "$int_threshold" ]]; then
+      bar_color="$RED"
+    elif [[ "$int_percentage" -ge "$warning_threshold" ]]; then
+      bar_color="$YELLOW"
+    fi
   fi
 
-  local filled_width=$((percentage * width / 100))
-  local threshold_pos=$((threshold * width / 100))
+  # Calculate bar dimensions using integer arithmetic
+  local int_percentage=${percentage%.*} # Remove decimal part
+  local int_threshold=${threshold%.*}   # Remove decimal part
+
+  local filled_width=$((int_percentage * width / 100))
+  local threshold_pos=$((int_threshold * width / 100))
   local empty_width=$((width - filled_width))
 
   local filled
