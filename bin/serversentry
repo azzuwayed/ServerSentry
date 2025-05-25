@@ -70,6 +70,19 @@ init_core_system() {
     return 1
   fi
 
+  # 4. Load error handling system (depends on logging and config)
+  if [[ -f "$BASE_DIR/lib/core/error_handling.sh" ]]; then
+    # shellcheck source=lib/core/error_handling.sh
+    source "$BASE_DIR/lib/core/error_handling.sh"
+    if ! error_handling_init; then
+      log_warning "Failed to initialize error handling system - continuing with basic error handling"
+    else
+      log_debug "Error handling system initialized successfully"
+    fi
+  else
+    log_warning "Error handling system not found: $BASE_DIR/lib/core/error_handling.sh - continuing with basic error handling"
+  fi
+
   log_debug "Core system initialized successfully"
   return 0
 }

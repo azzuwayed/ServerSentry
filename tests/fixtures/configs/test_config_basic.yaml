@@ -1,0 +1,51 @@
+enabled: true
+log_level: info
+check_interval: 60
+timeout: 30
+
+monitoring:
+  cpu:
+    enabled: true
+    threshold: 80
+    check_interval: 30
+  memory:
+    enabled: true
+    threshold: 85
+    check_interval: 30
+  disk:
+    enabled: true
+    threshold: 90
+    paths:
+      - "/"
+      - "/var"
+    check_interval: 60
+  process:
+    enabled: false
+    processes: []
+
+notifications:
+  email:
+    enabled: false
+    smtp_host: "smtp.example.com"
+    smtp_port: 587
+    smtp_user: "alerts@example.com"
+    smtp_password: ""
+    from_address: "alerts@example.com"
+    to_addresses:
+      - "admin@example.com"
+    subject_prefix: "[ServerSentry]"
+  slack:
+    enabled: false
+    webhook_url: ""
+    channel: "#alerts"
+    username: "ServerSentry"
+    icon_emoji: ":warning:"
+  teams:
+    enabled: false
+    webhook_url: ""
+
+logging:
+  file: "/var/log/serversentry.log"
+  max_size: "10MB"
+  max_files: 5
+  format: "%Y-%m-%d %H:%M:%S"

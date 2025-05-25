@@ -11,6 +11,18 @@ set -euo pipefail
 readonly SCRIPT_VERSION="3.0.0"
 readonly SCRIPT_NAME="ServerSentry Bash Lint Fixer"
 
+# Get base directory for error handling
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+export BASE_DIR="$SCRIPT_DIR"
+
+# Initialize error handling system
+if [[ -f "$BASE_DIR/lib/core/error_handling.sh" ]]; then
+  source "$BASE_DIR/lib/core/error_handling.sh"
+  if ! error_handling_init; then
+    echo "Warning: Failed to initialize error handling system - continuing with basic error handling" >&2
+  fi
+fi
+
 # Colors for output
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
@@ -40,7 +52,7 @@ FIXED_FILES=0
 FAILED_FILES=0
 TOTAL_FIXES_APPLIED=0
 
-# Print functions with consistent formatting
+# Enhanced print functions with error handling integration
 print_status() {
   local color=$1
   local message=$2
@@ -50,9 +62,140 @@ print_status() {
 print_success() { print_status "$GREEN" "✅ $1"; }
 print_info() { print_status "$BLUE" "ℹ️  $1"; }
 print_warning() { print_status "$YELLOW" "⚠️  $1"; }
-print_error() { print_status "$RED" "❌ $1"; }
+print_error() {
+  print_status "$RED" "❌ $1"
+  # Log error if error handling is available
+  if declare -f log_error >/dev/null 2>&1; then
+    log_error "fix-lint.sh: $1"
+  fi
+}
 print_header() { print_status "${BOLD}${CYAN}" "$1"; }
 print_dim() { print_status "$DIM" "$1"; }
+
+# Enhanced file operation with error handling
+safe_file_operation() {
+  local operation="$1"
+  local source_file="$2"
+  local dest_file="${3:-}"
+  local error_msg="${4:-File operation failed}"
+
+  if declare -f safe_execute >/dev/null 2>&1; then
+    case "$operation" in
+    "copy")
+      safe_execute "cp '$source_file' '$dest_file'" "$error_msg: copy $source_file to $dest_file"
+      ;;
+    "move")
+      safe_execute "mv '$source_file' '$dest_file'" "$error_msg: move $source_file to $dest_file"
+      ;;
+    "remove")
+      safe_execute "rm -f '$source_file'" "$error_msg: remove $source_file"
+      ;;
+    "mkdir")
+      safe_execute "mkdir -p '$source_file'" "$error_msg: create directory $source_file"
+      ;;
+    *)
+      print_error "Unknown file operation: $operation"
+      return 1
+      ;;
+    esac
+  else
+    # Fallback to direct operations
+    case "$operation" in
+    "copy")
+      cp "$source_file" "$dest_file" || {
+        print_error "$error_msg: copy $source_file to $dest_file"
+        return 1
+      }
+      ;;
+    "move")
+      mv "$source_file" "$dest_file" || {
+        print_error "$error_msg: move $source_file to $dest_file"
+        return 1
+      }
+      ;;
+    "remove")
+      rm -f "$source_file" || {
+        print_error "$error_msg: remove $source_file"
+        return 1
+      }
+      ;;
+    "mkdir")
+      mkdir -p "$source_file" || {
+        print_error "$error_msg: create directory $source_file"
+        return 1
+      }
+      ;;
+    *)
+      print_error "Unknown file operation: $operation"
+      return 1
+      ;;
+    esac
+  fi
+}
+
+# Enhanced backup creation with error handling
+create_backup() {
+  local file="$1"
+  local backup_file="$2"
+
+  if [[ "$FORCE_BACKUP" == "false" ]]; then
+    return 0
+  fi
+
+  local backup_dir
+  backup_dir=$(dirname "$backup_file")
+
+  # Create backup directory
+  if ! safe_file_operation "mkdir" "$backup_dir" "" "Failed to create backup directory"; then
+    return 1
+  fi
+
+  # Create backup
+  if ! safe_file_operation "copy" "$file" "$backup_file" "Failed to create backup"; then
+    return 1
+  fi
+
+  if [[ "$VERBOSE" == "true" ]]; then
+    print_dim "Created backup: $backup_file"
+  fi
+
+  return 0
+}
+
+# Enhanced validation with error handling
+validate_dependencies() {
+  local missing_deps=()
+
+  # Check for required tools
+  local required_tools=("shellcheck")
+  for tool in "${required_tools[@]}"; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      missing_deps+=("$tool")
+    fi
+  done
+
+  # Check for optional tools
+  local optional_tools=("shfmt")
+  for tool in "${optional_tools[@]}"; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      print_warning "Optional tool '$tool' not found - some fixes will be skipped"
+    fi
+  done
+
+  if [[ ${#missing_deps[@]} -gt 0 ]]; then
+    print_error "Missing required dependencies: ${missing_deps[*]}"
+    print_info "Please install missing tools and try again"
+
+    # Use error handling system if available
+    if declare -f throw_error >/dev/null 2>&1; then
+      throw_error 9 "Missing required dependencies: ${missing_deps[*]}" 3
+    else
+      exit 9
+    fi
+  fi
+
+  return 0
+}
 
 # Enhanced usage information
 show_usage() {

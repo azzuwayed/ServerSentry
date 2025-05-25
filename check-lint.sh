@@ -10,6 +10,18 @@ set -euo pipefail
 readonly SCRIPT_VERSION="3.0.0"
 readonly SCRIPT_NAME="ServerSentry ShellCheck Analyzer"
 
+# Get base directory for error handling
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+export BASE_DIR="$SCRIPT_DIR"
+
+# Initialize error handling system
+if [[ -f "$BASE_DIR/lib/core/error_handling.sh" ]]; then
+  source "$BASE_DIR/lib/core/error_handling.sh"
+  if ! error_handling_init; then
+    echo "Warning: Failed to initialize error handling system - continuing with basic error handling" >&2
+  fi
+fi
+
 # Colors and formatting
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
@@ -38,13 +50,124 @@ declare -A SEVERITY_COUNTS
 TOTAL_EXECUTION_TIME=0
 FILES_PROCESSED=0
 
-# Print functions
-print_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
-print_success() { echo -e "${GREEN}✅ $1${NC}"; }
-print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
-print_error() { echo -e "${RED}❌ $1${NC}"; }
+# Enhanced print functions with error handling integration
+print_info() {
+  echo -e "${BLUE}ℹ️  $1${NC}"
+  if declare -f log_info >/dev/null 2>&1; then
+    log_info "check-lint.sh: $1"
+  fi
+}
+print_success() {
+  echo -e "${GREEN}✅ $1${NC}"
+  if declare -f log_info >/dev/null 2>&1; then
+    log_info "check-lint.sh: SUCCESS - $1"
+  fi
+}
+print_warning() {
+  echo -e "${YELLOW}⚠️  $1${NC}"
+  if declare -f log_warning >/dev/null 2>&1; then
+    log_warning "check-lint.sh: $1"
+  fi
+}
+print_error() {
+  echo -e "${RED}❌ $1${NC}"
+  if declare -f log_error >/dev/null 2>&1; then
+    log_error "check-lint.sh: $1"
+  fi
+}
 print_header() { echo -e "${BOLD}${CYAN}$1${NC}"; }
 print_dim() { echo -e "${DIM}$1${NC}"; }
+
+# Enhanced dependency validation with error handling
+validate_dependencies() {
+  local missing_deps=()
+
+  # Check for ShellCheck
+  if ! command -v shellcheck >/dev/null 2>&1; then
+    missing_deps+=("shellcheck")
+  fi
+
+  # Check for optional dependencies
+  local optional_tools=("jq" "yq")
+  for tool in "${optional_tools[@]}"; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      print_warning "Optional tool '$tool' not found - some features may be limited"
+    fi
+  done
+
+  if [[ ${#missing_deps[@]} -gt 0 ]]; then
+    print_error "Missing required dependencies: ${missing_deps[*]}"
+    print_info "Please install ShellCheck: https://github.com/koalaman/shellcheck#installing"
+
+    # Use error handling system if available
+    if declare -f throw_error >/dev/null 2>&1; then
+      throw_error 9 "Missing required dependencies: ${missing_deps[*]}" 3
+    else
+      exit 9
+    fi
+  fi
+
+  return 0
+}
+
+# Enhanced file processing with error handling
+process_file_safely() {
+  local file="$1"
+  local start_time end_time duration
+
+  start_time=$(date +%s.%N 2>/dev/null || date +%s)
+
+  # Use safe_execute if available
+  if declare -f safe_execute >/dev/null 2>&1; then
+    if ! safe_execute "shellcheck --format=json '$file'" "ShellCheck analysis failed for $file"; then
+      print_error "Failed to analyze file: $file"
+      return 1
+    fi
+  else
+    # Fallback to direct execution
+    if ! shellcheck --format=json "$file" 2>/dev/null; then
+      print_error "Failed to analyze file: $file"
+      return 1
+    fi
+  fi
+
+  end_time=$(date +%s.%N 2>/dev/null || date +%s)
+
+  # Calculate duration (handle systems without nanosecond precision)
+  if [[ "$start_time" == *"."* ]]; then
+    duration=$(echo "$end_time - $start_time" | bc 2>/dev/null || echo "0")
+  else
+    duration=$((end_time - start_time))
+  fi
+
+  FILE_STATS["$file"]="$duration"
+  return 0
+}
+
+# Enhanced output writing with error handling
+write_output_safely() {
+  local content="$1"
+  local output_file="$2"
+
+  if [[ -n "$output_file" ]]; then
+    # Use safe_execute if available
+    if declare -f safe_execute >/dev/null 2>&1; then
+      if ! safe_execute "echo '$content' > '$output_file'" "Failed to write output to $output_file"; then
+        print_error "Failed to write output to file: $output_file"
+        return 1
+      fi
+    else
+      # Fallback to direct execution
+      if ! echo "$content" >"$output_file" 2>/dev/null; then
+        print_error "Failed to write output to file: $output_file"
+        return 1
+      fi
+    fi
+    print_success "Output written to: $output_file"
+  fi
+
+  return 0
+}
 
 # Enhanced usage information
 show_usage() {

@@ -9,6 +9,15 @@ set -e
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 SERVERSENTRY="$SCRIPT_DIR/bin/serversentry"
+export BASE_DIR="$SCRIPT_DIR"
+
+# Initialize error handling system
+if [[ -f "$BASE_DIR/lib/core/error_handling.sh" ]]; then
+  source "$BASE_DIR/lib/core/error_handling.sh"
+  if ! error_handling_init; then
+    echo "Warning: Failed to initialize error handling system - continuing with basic error handling" >&2
+  fi
+fi
 
 # Source standardized color functions
 if [[ -f "$SCRIPT_DIR/lib/ui/cli/colors.sh" ]]; then
@@ -39,6 +48,7 @@ demo_print_step() {
   echo ""
 }
 
+# Enhanced run_command function with error handling
 run_command() {
   local description="$1"
   local command="$2"
@@ -52,15 +62,34 @@ run_command() {
   fi
 
   if [ "$show_output" = "true" ]; then
-    eval "$command" || print_warning "Command failed (this may be expected)"
+    # Use safe_execute if available, otherwise fallback to eval
+    if declare -f safe_execute >/dev/null 2>&1; then
+      safe_execute "$command" "Demo command failed: $description" || print_warning "Command failed (this may be expected)"
+    else
+      eval "$command" || print_warning "Command failed (this may be expected)"
+    fi
   else
-    eval "$command" >/dev/null 2>&1 || print_warning "Command failed"
+    if declare -f safe_execute >/dev/null 2>&1; then
+      safe_execute "$command" "Demo command failed: $description" >/dev/null 2>&1 || print_warning "Command failed"
+    else
+      eval "$command" >/dev/null 2>&1 || print_warning "Command failed"
+    fi
   fi
   echo ""
 }
 
-# Main demo function
+# Enhanced main function with error handling
 main() {
+  # Validate ServerSentry binary exists
+  if [[ ! -f "$SERVERSENTRY" ]]; then
+    if declare -f throw_error >/dev/null 2>&1; then
+      throw_error 3 "ServerSentry binary not found at: $SERVERSENTRY" 3
+    else
+      print_error "ServerSentry binary not found at: $SERVERSENTRY"
+      exit 3
+    fi
+  fi
+
   demo_print_header "ServerSentry v2 - Enterprise Monitoring Demo"
 
   print_success "Welcome to ServerSentry v2!"
@@ -212,13 +241,6 @@ main() {
   echo ""
   print_info "For more information, see the documentation in docs/README.md"
 }
-
-# Check if ServerSentry executable exists
-if [ ! -f "$SERVERSENTRY" ]; then
-  print_error "Error: ServerSentry executable not found at $SERVERSENTRY"
-  echo "Please ensure you're running this script from the ServerSentry root directory."
-  exit 1
-fi
 
 # Run the demo
 main "$@"

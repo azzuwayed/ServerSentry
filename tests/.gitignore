@@ -1,0 +1,34 @@
+# Test temporary files
+tmp/
+*.tmp
+*.temp
+
+# Test reports (keep structure but ignore generated content)
+reports/*.html
+reports/*.json
+reports/*.xml
+reports/*.log
+
+# Test artifacts
+*.pid
+*.lock
+test_*_$$*
+
+# Coverage files
+coverage/
+*.coverage
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Test environment files
+.env.test
+.env.local
