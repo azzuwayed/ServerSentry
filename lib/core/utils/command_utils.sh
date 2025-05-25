@@ -37,7 +37,10 @@ util_command_exists() {
   local cmd="$1"
 
   if [[ -z "$cmd" ]]; then
-    log_error "Command name cannot be empty" "command_utils"
+    # Only log if logging functions are available
+    if declare -f log_error >/dev/null 2>&1; then
+      log_error "Command name cannot be empty" "command_utils"
+    fi
     return 1
   fi
 
@@ -218,7 +221,10 @@ util_execute_with_retry() {
     ((attempt++))
   done
 
-  log_error "Command failed after $max_attempts attempts: ${command[*]}" "command_utils"
+  # Only log if logging functions are available
+  if declare -f log_error >/dev/null 2>&1; then
+    log_error "Command failed after $max_attempts attempts: ${command[*]}" "command_utils"
+  fi
   return 1
 }
 
@@ -300,6 +306,7 @@ util_install_package() {
     apk add "$package"
     ;;
   *)
+    # Only log if logging functions are available
     if declare -f log_error >/dev/null 2>&1; then
       log_error "Cannot install package: unknown package manager" "command_utils"
     fi

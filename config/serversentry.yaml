@@ -157,7 +157,7 @@ plugins:
 
 # Notification System
 notifications:
-  enabled: true
+  enabled: false
   channels: [teams]
   cooldown_period: 300 # 5 minutes between notifications
 
@@ -165,7 +165,7 @@ notifications:
   teams:
     webhook_url: "https://example.webhook.office.com/webhookb2/your-webhook-url"
     notification_title: "ServerSentry Alert"
-    enabled: true
+    enabled: false
 
   # Email Configuration
   email:

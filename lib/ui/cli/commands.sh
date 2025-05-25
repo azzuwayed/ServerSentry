@@ -430,7 +430,7 @@ cmd_webhook() {
     if [ -f "$webhook_config" ]; then
       # Backup and clear webhook URL
       cp "$webhook_config" "$webhook_config.bak"
-      sed -i '/^webhook_url=/d' "$webhook_config"
+      compat_sed_inplace '/^webhook_url=/d' "$webhook_config"
       echo "Webhook configuration cleared."
     else
       echo "No webhook configuration found."
@@ -527,7 +527,7 @@ cmd_update_threshold() {
     echo "Updated $name to $value in $MAIN_CONFIG"
   else
     # Fallback: naive sed (may not work for all YAML)
-    sed -i.bak "/^${name}:/c\${name}: ${value}" "$MAIN_CONFIG"
+    compat_sed_inplace "/^${name}:/c\${name}: ${value}" "$MAIN_CONFIG"
     echo "Updated $name to $value in $MAIN_CONFIG (sed)"
   fi
 }
@@ -684,7 +684,7 @@ cmd_composite() {
     local config_file="$COMPOSITE_CONFIG_DIR/${check_name}.conf"
     if [ -f "$config_file" ]; then
       # Enable the check by updating the config file
-      sed -i.bak 's/enabled=false/enabled=true/' "$config_file"
+      compat_sed_inplace 's/enabled=false/enabled=true/' "$config_file"
       echo "✅ Enabled composite check: $check_name"
     else
       echo "❌ Composite check not found: $check_name"
@@ -701,7 +701,7 @@ cmd_composite() {
     local config_file="$COMPOSITE_CONFIG_DIR/${check_name}.conf"
     if [ -f "$config_file" ]; then
       # Disable the check by updating the config file
-      sed -i.bak 's/enabled=true/enabled=false/' "$config_file"
+      compat_sed_inplace 's/enabled=true/enabled=false/' "$config_file"
       echo "✅ Disabled composite check: $check_name"
     else
       echo "❌ Composite check not found: $check_name"
@@ -843,7 +843,7 @@ cmd_anomaly() {
 
     local config_file="$ANOMALY_CONFIG_DIR/${plugin_name}_anomaly.conf"
     if [ -f "$config_file" ]; then
-      sed -i.bak 's/enabled=false/enabled=true/' "$config_file"
+      compat_sed_inplace 's/enabled=false/enabled=true/' "$config_file"
       echo "✅ Enabled anomaly detection for $plugin_name"
     else
       echo "❌ No anomaly configuration found for plugin: $plugin_name"
@@ -859,7 +859,7 @@ cmd_anomaly() {
 
     local config_file="$ANOMALY_CONFIG_DIR/${plugin_name}_anomaly.conf"
     if [ -f "$config_file" ]; then
-      sed -i.bak 's/enabled=true/enabled=false/' "$config_file"
+      compat_sed_inplace 's/enabled=true/enabled=false/' "$config_file"
       echo "✅ Disabled anomaly detection for $plugin_name"
     else
       echo "❌ No anomaly configuration found for plugin: $plugin_name"

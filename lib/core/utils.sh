@@ -63,6 +63,10 @@ init_utilities() {
 # Source compatibility utilities first
 if [[ -f "$BASE_DIR/lib/core/utils/compat_utils.sh" ]]; then
   source "$BASE_DIR/lib/core/utils/compat_utils.sh"
+  # Initialize compatibility layer
+  if ! compat_init; then
+    echo "Warning: Failed to initialize compatibility layer" >&2
+  fi
 fi
 
 # Initialize utility modules if logging is available

@@ -254,7 +254,11 @@ create_error_context() {
   if [[ "$ERROR_STACK_TRACE_ENABLED" == "true" ]]; then
     local stack_trace
     stack_trace=$(generate_stack_trace)
-    context=$(echo "$context" | sed 's/}$/,\"stack_trace\":\"'"$(echo "$stack_trace" | sed 's/"/\\"/g')"'\"}/')
+    # Use a more robust approach for JSON modification
+    local escaped_stack_trace
+    escaped_stack_trace=$(echo "$stack_trace" | sed 's/"/\\"/g' | sed 's/\\/\\\\/g' | tr '\n' ' ')
+    # Remove the closing brace and add stack trace
+    context="${context%\}},\"stack_trace\":\"$escaped_stack_trace\"}"
   fi
 
   echo "$context"

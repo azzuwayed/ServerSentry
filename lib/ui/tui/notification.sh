@@ -149,7 +149,7 @@ tui_notification_management() {
         IFS=,
         echo \""${new_enabled[*]}"\"
       )]"
-      if ! sed -i.bak "/^notification_channels:/c\\$new_line" "$config_file" 2>/dev/null; then
+      if ! compat_sed_inplace "/^notification_channels:/c\\$new_line" "$config_file" 2>/dev/null; then
         awk -v repl="$new_line" '/^notification_channels:/ {$0=repl} {print}' "$config_file" >"$config_file.new" && mv "$config_file.new" "$config_file"
       fi
       # Validate YAML after change

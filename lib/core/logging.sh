@@ -12,6 +12,12 @@ LOGGING_MODULE_LOADED=true
 export LOGGING_MODULE_LOADED
 
 # Logging configuration
+# Set BASE_DIR fallback if not set
+if [[ -z "${BASE_DIR:-}" ]]; then
+  BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  export BASE_DIR
+fi
+
 LOG_DIR="${BASE_DIR}/logs"
 LOG_FILE="${LOG_DIR}/serversentry.log"
 

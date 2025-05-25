@@ -464,6 +464,54 @@ Performance tests track:
 - Secure configuration defaults
 - Network communication security
 
+## Reset Functionality
+
+### System Reset for Testing
+
+ServerSentry includes a comprehensive reset script that restores the system to a fresh installation state. This is particularly useful for testing scenarios where you need a clean environment.
+
+#### Quick Reset
+
+```bash
+# Interactive reset with confirmation
+./tests/reset_serversentry.sh
+
+# Force reset without confirmation
+./tests/reset_serversentry.sh --force
+
+# Preview what would be reset
+./tests/reset_serversentry.sh --dry-run
+
+# Reset but keep configuration files
+./tests/reset_serversentry.sh --keep-config
+
+# Using the wrapper script
+./bin/reset --force
+```
+
+#### What Gets Reset
+
+- **Services**: Stops all ServerSentry processes
+- **Runtime Files**: Removes PID files, lock files, cache
+- **Logs**: Clears all log files and archives
+- **Plugin State**: Resets plugin registry and performance data
+- **Diagnostics**: Clears diagnostic reports
+- **Configuration**: Optionally removes config files (unless `--keep-config`)
+- **Environment**: Clears environment files
+
+#### Integration with Testing
+
+```bash
+# Reset before test run for clean state
+./tests/reset_serversentry.sh --force
+./tests/run_enhanced_tests.sh
+
+# Reset after tests for cleanup
+./tests/reset_serversentry.sh --force
+```
+
+For detailed information about the reset functionality, see [`RESET_GUIDE.md`](RESET_GUIDE.md).
+
 ---
 
 For more information, see the individual test files and the main ServerSentry documentation.

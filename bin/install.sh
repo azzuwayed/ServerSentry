@@ -11,16 +11,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 BASE_DIR="$(dirname "$SCRIPT_DIR")"
 export BASE_DIR
 
-# Initialize error handling system early
-if [[ -f "$BASE_DIR/lib/core/error_handling.sh" ]]; then
-  source "$BASE_DIR/lib/core/error_handling.sh"
-  if ! error_handling_init; then
-    echo "Warning: Failed to initialize error handling system - continuing with basic error handling" >&2
-  fi
-fi
+# Skip error handling system initialization in install script to avoid interference
+# The error handling system can be too aggressive during installation
+# if [[ -f "$BASE_DIR/lib/core/error_handling.sh" ]]; then
+#   source "$BASE_DIR/lib/core/error_handling.sh"
+#   if ! error_handling_init; then
+#     echo "Warning: Failed to initialize error handling system - continuing with basic error handling" >&2
+#   fi
+# fi
 
 # Source compatibility utilities
 source "$BASE_DIR/lib/core/utils/compat_utils.sh"
+
+# Initialize compatibility layer
+if ! compat_init; then
+  echo "Warning: Failed to initialize compatibility layer - some features may not work correctly" >&2
+fi
+
+# Source command utilities for dependency checking
+if [[ -f "$BASE_DIR/lib/core/utils/command_utils.sh" ]]; then
+  source "$BASE_DIR/lib/core/utils/command_utils.sh"
+fi
 
 # Source standardized color functions
 if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
@@ -759,10 +770,14 @@ main() {
 
   # Test the installation
   print_info "Testing the installation..."
-  "$BASE_DIR/bin/serversentry" version
+  # Disable error handling for the test to avoid interference
+  set +e
+  BASE_DIR="$BASE_DIR" "$BASE_DIR/bin/serversentry" version
+  local test_result=$?
+  set -e
 
   # shellcheck disable=SC2181
-  if [ $? -eq 0 ]; then
+  if [ $test_result -eq 0 ]; then
     # Consider: if command; then (direct exit code check)
     print_success "Installation test successful!"
   else
@@ -774,7 +789,12 @@ main() {
 
   # Show system compatibility information
   print_info "System compatibility information:"
-  compat_info
+  if declare -f compat_info >/dev/null 2>&1; then
+    compat_info
+  else
+    echo "OS: $(compat_get_os 2>/dev/null || echo 'unknown')"
+    echo "Package Manager: $(compat_get_package_manager 2>/dev/null || echo 'unknown')"
+  fi
 
   print_success "ServerSentry v2 installation complete!"
 }
