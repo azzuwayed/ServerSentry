@@ -152,7 +152,8 @@ serversentry template validate /path/to/template
 ```
 ServerSentry/
 ├── bin/
-│   └── serversentry                 # Main executable
+│   ├── serversentry                 # Main executable
+│   └── analyze-functions            # Function analysis wrapper
 ├── lib/
 │   ├── core/                        # Core system modules
 │   │   ├── config.sh               # Configuration management
@@ -184,6 +185,8 @@ ServerSentry/
 │   ├── notifications/              # Notification settings
 │   ├── plugins/                    # Plugin configurations
 │   └── templates/                  # Notification templates
+├── tools/                          # Development tools
+│   └── function-analysis/          # Function analysis scripts
 └── logs/                           # Log files and data
     ├── anomaly/                    # Anomaly detection data
     ├── diagnostics/                # Diagnostic reports
@@ -275,6 +278,31 @@ cpu_anomaly_enabled=true
 ```
 
 ## 🧪 Development
+
+### Function Analysis Tools
+
+ServerSentry includes comprehensive function analysis tools for codebase maintenance:
+
+```bash
+# Quick function analysis
+bin/analyze-functions extract
+
+# Search for specific functions
+bin/analyze-functions find util_
+bin/analyze-functions find config
+
+# View detailed reports
+cat tools/function-analysis/logs/function_summary.md
+```
+
+**Available Tools:**
+
+- **extract** - Comprehensive function analysis (1,116+ functions across 76 files)
+- **find** - Quick function search and location
+- **simple** - Basic analysis with CSV export
+- **advanced** - Dependency tracking and usage analysis
+
+All analysis files are organized in `tools/function-analysis/logs/` to keep the project clean.
 
 ### Creating Custom Plugins
 

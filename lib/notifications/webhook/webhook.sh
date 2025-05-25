@@ -16,11 +16,11 @@ webhook_provider_init() {
   log_debug "Initializing webhook provider"
 
   # Load configuration
-  webhook_url=$(get_config "webhook_url" "")
-  webhook_headers=$(get_config "webhook_headers" "Content-Type: application/json")
-  webhook_payload_template=$(get_config "webhook_payload_template" "")
-  webhook_method=$(get_config "webhook_method" "POST")
-  webhook_timeout=$(get_config "webhook_timeout" "10")
+  webhook_url=$(config_get_value "webhook_url" "")
+  webhook_headers=$(config_get_value "webhook_headers" "Content-Type: application/json")
+  webhook_payload_template=$(config_get_value "webhook_payload_template" "")
+  webhook_method=$(config_get_value "webhook_method" "POST")
+  webhook_timeout=$(config_get_value "webhook_timeout" "10")
 
   return 0
 }

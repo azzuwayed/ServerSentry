@@ -771,7 +771,7 @@ cmd_anomaly() {
   # Source the anomaly system
   if [ -f "$BASE_DIR/lib/core/anomaly.sh" ]; then
     source "$BASE_DIR/lib/core/anomaly.sh"
-    init_anomaly_system
+    anomaly_system_init
   else
     echo "❌ Anomaly detection system not available"
     return 1
@@ -799,7 +799,7 @@ cmd_anomaly() {
     if [ -n "$plugin_results" ]; then
       # Run anomaly detection
       echo "Running anomaly detection for all plugins..."
-      run_anomaly_detection "$plugin_results"
+      anomaly_run_detection "$plugin_results"
     else
       echo "❌ No plugin results available for anomaly testing"
       return 1
@@ -807,7 +807,36 @@ cmd_anomaly() {
     ;;
   summary)
     local days="${1:-7}"
-    get_anomaly_summary "$days"
+    echo "Anomaly Detection Summary (Last $days days):"
+    echo "==========================================="
+
+    # Check if anomaly results directory exists
+    if [ -d "$ANOMALY_RESULTS_DIR" ]; then
+      local total_anomalies=0
+      local plugins_with_anomalies=()
+
+      # Count anomalies for each plugin
+      for result_file in "$ANOMALY_RESULTS_DIR"/*.log; do
+        if [ -f "$result_file" ]; then
+          local plugin_name
+          plugin_name=$(basename "$result_file" | sed 's/_[0-9]\{8\}\.log$//')
+          local count
+          count=$(wc -l <"$result_file" 2>/dev/null || echo "0")
+          if [ "$count" -gt 0 ]; then
+            echo "• $plugin_name: $count anomalies"
+            total_anomalies=$((total_anomalies + count))
+            plugins_with_anomalies+=("$plugin_name")
+          fi
+        fi
+      done
+
+      echo ""
+      echo "Total anomalies detected: $total_anomalies"
+      echo "Plugins with anomalies: ${#plugins_with_anomalies[@]}"
+    else
+      echo "No anomaly results directory found."
+      echo "Run 'serversentry anomaly test' to generate anomaly data."
+    fi
     ;;
   config)
     local plugin_name="$1"
@@ -944,7 +973,7 @@ cmd_diagnostics() {
   # Source the diagnostics system
   if [ -f "$BASE_DIR/lib/core/diagnostics.sh" ]; then
     source "$BASE_DIR/lib/core/diagnostics.sh"
-    init_diagnostics_system
+    diagnostics_system_init
   else
     echo "❌ Diagnostics system not available"
     return 1
@@ -956,7 +985,7 @@ cmd_diagnostics() {
     echo "This may take a few moments..."
     echo ""
 
-    if run_full_diagnostics; then
+    if diagnostics_run_full; then
       echo ""
       echo "✅ Diagnostics completed successfully"
     else

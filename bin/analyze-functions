@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# ServerSentry Function Analysis Wrapper
+# Quick access to function analysis tools
+#
+
+TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/tools/function-analysis"
+
+show_help() {
+  echo "🔍 ServerSentry Function Analysis Tools"
+  echo "======================================="
+  echo ""
+  echo "Usage: $0 <command> [args...]"
+  echo ""
+  echo "Commands:"
+  echo "  extract     - Run comprehensive function analysis (recommended)"
+  echo "  find <term> - Search for functions matching term"
+  echo "  simple      - Run simple analysis"
+  echo "  advanced    - Run advanced analysis with dependencies"
+  echo "  help        - Show this help"
+  echo ""
+  echo "Examples:"
+  echo "  $0 extract              # Full analysis"
+  echo "  $0 find util_           # Find utility functions"
+  echo "  $0 find config          # Find config functions"
+  echo ""
+  echo "Output files are stored in: tools/function-analysis/logs/"
+}
+
+case "${1:-help}" in
+"extract")
+  echo "🔍 Running comprehensive function analysis..."
+  "$TOOLS_DIR/extract_functions.sh"
+  ;;
+"find")
+  if [[ -z "$2" ]]; then
+    echo "❌ Please provide a search term"
+    echo "Usage: $0 find <search_term>"
+    exit 1
+  fi
+  "$TOOLS_DIR/find_function.sh" "$2"
+  ;;
+"simple")
+  echo "🔍 Running simple function analysis..."
+  "$TOOLS_DIR/analyze_functions_simple.sh"
+  ;;
+"advanced")
+  echo "🔍 Running advanced function analysis..."
+  "$TOOLS_DIR/analyze_functions.sh"
+  ;;
+"help" | "-h" | "--help")
+  show_help
+  ;;
+*)
+  echo "❌ Unknown command: $1"
+  echo ""
+  show_help
+  exit 1
+  ;;
+esac
