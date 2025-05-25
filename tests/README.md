@@ -1,32 +1,43 @@
 # ServerSentry v2 Test Suite
 
-This directory contains the comprehensive test suite for ServerSentry v2, implementing Phase 1 and Phase 2 enhancements.
+This directory contains the comprehensive test suite for ServerSentry v2
 
 ## Directory Structure
 
 ```
 tests/
-├── unit/                           # Unit tests organized by component
-│   ├── core/                      # Core functionality tests
-│   ├── plugins/                   # Plugin-specific tests
-│   ├── notifications/             # Notification system tests
-│   ├── config/                    # Configuration tests
-│   ├── error_handling/            # Error handling tests
-│   └── persistence/               # Data persistence tests
-├── integration/                   # Integration tests
-│   ├── api/                      # API interface tests
-│   └── scenarios/                # Real-world scenario tests
-├── performance/                   # Performance and benchmark tests
-├── fixtures/                     # Test data and configurations
-│   ├── configs/                  # Test configuration files
-│   ├── responses/                # Mock API responses
-│   └── logs/                     # Sample log files
-├── helpers/                      # Test utilities and helpers
-├── reports/                      # Generated test reports
-└── tmp/                         # Temporary test files
+├── run_enhanced_tests.sh          # Main test runner with comprehensive features
+├── unit/                          # Unit tests organized by component
+│   ├── core/                     # Core functionality tests
+│   ├── plugins/                  # Plugin-specific tests
+│   ├── notifications/            # Notification system tests
+│   ├── config/                   # Configuration tests
+│   ├── error_handling/           # Error handling tests
+│   └── persistence/              # Data persistence tests
+├── integration/                  # Integration tests
+│   ├── comprehensive_integration_test.sh  # Main integration test suite
+│   ├── api/                     # API interface tests
+│   └── scenarios/               # Real-world scenario tests
+├── performance/                  # Performance and benchmark tests
+├── fixtures/                    # Test data and configurations
+│   ├── configs/                 # Test configuration files
+│   ├── responses/               # Mock API responses
+│   └── logs/                    # Sample log files
+├── helpers/                     # Test utilities and helpers
+├── reports/                     # Generated test reports
+└── tmp/                        # Temporary test files
 ```
 
 ## Test Categories
+
+### Overview
+
+The test suite is organized into distinct categories, each serving a specific purpose:
+
+- **Unit Tests**: Test individual components in isolation
+- **Integration Tests**: Test component interactions and end-to-end functionality
+- **Performance Tests**: Benchmark and performance validation
+- **Security Tests**: Vulnerability and security validation (integrated into comprehensive tests)
 
 ### Unit Tests
 
@@ -66,6 +77,13 @@ tests/
 - Resource exhaustion
 
 ### Integration Tests
+
+**Comprehensive Integration Test** (`tests/integration/comprehensive_integration_test.sh`)
+
+- Basic functionality testing (CLI commands, plugins, services)
+- Security vulnerability validation
+- Advanced integration scenarios
+- Service lifecycle testing
 
 **API Tests** (`tests/integration/api/`)
 
@@ -124,9 +142,9 @@ The test framework includes advanced utilities:
 
 ## Running Tests
 
-### Available Test Runners
+### Test Runner
 
-#### 1. Enhanced Test Runner (Primary) ⭐
+#### Enhanced Test Runner ⭐
 
 **File**: `run_enhanced_tests.sh`
 
@@ -165,33 +183,19 @@ The main test runner with comprehensive features:
 - ✅ Test filtering
 - ✅ Comprehensive reporting
 
-#### 2. Simple Test Runner (Wrapper)
-
-**File**: `run_tests.sh`
-
-A simple wrapper for backward compatibility:
-
-```bash
-# Run all tests (calls enhanced runner)
-./tests/run_tests.sh
-
-# Pass arguments to enhanced runner
-./tests/run_tests.sh --category unit
-./tests/run_tests.sh --help
-```
-
-**Purpose**: Provides a simple interface that forwards all calls to the enhanced runner.
-
 ### Recommended Usage
 
 #### For Daily Development
 
 ```bash
 # Quick test run
-./tests/run_tests.sh
+./tests/run_enhanced_tests.sh
 
 # Run specific category
 ./tests/run_enhanced_tests.sh --category unit
+
+# Run comprehensive integration tests
+./tests/integration/comprehensive_integration_test.sh
 ```
 
 #### For CI/CD
@@ -206,6 +210,16 @@ A simple wrapper for backward compatibility:
 ```bash
 # Include performance benchmarks
 ./tests/run_enhanced_tests.sh --category performance
+```
+
+#### For Security Testing
+
+```bash
+# Security tests are included in integration category
+./tests/run_enhanced_tests.sh --category integration
+
+# Or run comprehensive integration test directly
+./tests/integration/comprehensive_integration_test.sh
 ```
 
 #### For Debugging
@@ -234,6 +248,7 @@ export TEST_VERBOSE=true
 # Run individual test files
 ./tests/unit/core/core_config_utils_test.sh
 ./tests/performance/benchmark_test.sh
+./tests/integration/comprehensive_integration_test.sh
 ./tests/integration/scenarios/high_load_scenario.sh
 ```
 
@@ -335,24 +350,44 @@ Coverage reports are saved to `tests/reports/coverage_report.html`
 
 ### GitHub Actions Integration
 
+The project includes a comprehensive CI/CD pipeline with multiple test jobs:
+
 ```yaml
-name: Test Suite
+name: ServerSentry CI/CD Pipeline
 on: [push, pull_request]
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Run Tests
+      - uses: actions/checkout@v4
+      - name: Run Linting
+        run: ./check-lint.sh
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-22.04, macos-latest]
+        bash-version: ["4.4", "5.0", "5.1", "5.2"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Unit Tests
         run: |
           chmod +x tests/run_enhanced_tests.sh
-          tests/run_enhanced_tests.sh --parallel 4 --coverage --report
-      - name: Upload Reports
-        uses: actions/upload-artifact@v2
-        with:
-          name: test-reports
-          path: tests/reports/
+          tests/run_enhanced_tests.sh --category unit --report --coverage
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Integration Tests
+        run: |
+          tests/run_enhanced_tests.sh --category integration --report
 ```
+
+The full pipeline includes linting, unit tests, integration tests, performance tests, security tests, and deployment stages.
 
 ### Quality Gates
 
