@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#
+# ServerSentry v2 - Reset Wrapper Script
+#
+# Simple wrapper to access the reset functionality from anywhere
+
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." &>/dev/null && pwd)"
+
+# Execute the main reset script with all arguments
+exec "$BASE_DIR/tests/reset_serversentry.sh" "$@"
