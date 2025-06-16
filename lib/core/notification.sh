@@ -4,12 +4,51 @@
 #
 # This module handles loading notification providers and sending notifications
 
-# Notification system configuration
-NOTIFICATION_DIR="${BASE_DIR}/lib/notifications"
-NOTIFICATION_CONFIG_DIR="${BASE_DIR}/config/notifications"
+# Prevent multiple sourcing
+if [[ "${NOTIFICATION_MODULE_LOADED:-}" == "true" ]]; then
+  return 0
+fi
+NOTIFICATION_MODULE_LOADED=true
+export NOTIFICATION_MODULE_LOADED
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+    current_dir="$(dirname "$current_dir")"
+  done
+
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+
+# Notification system configuration using bootstrap paths
+NOTIFICATION_DIR="${NOTIFICATION_DIR:-${SERVERSENTRY_NOTIFICATIONS_DIR}}"
+NOTIFICATION_CONFIG_DIR="${NOTIFICATION_CONFIG_DIR:-${SERVERSENTRY_CONFIG_DIR}/notifications}"
 
 # Array to store registered notification providers
 declare -a registered_providers
+
+# Fallback logging functions if not available
+if ! declare -f log_debug >/dev/null 2>&1; then
+  log_debug() { echo "[DEBUG] [notifications] $1" >&2; }
+  log_info() { echo "[INFO] [notifications] $1" >&2; }
+  log_warning() { echo "[WARNING] [notifications] $1" >&2; }
+  log_error() { echo "[ERROR] [notifications] $1" >&2; }
+fi
 
 # Initialize notification system with enhanced error handling
 # Returns:
@@ -36,7 +75,7 @@ notification_system_init() {
 
   # Check if notifications are enabled
   local notifications_enabled
-  notifications_enabled=$(config_get_value "notifications.enabled" "false")
+  notifications_enabled=$(util_config_get_value "notifications.enabled" "false")
 
   if [[ "$notifications_enabled" != "true" ]]; then
     log_debug "Notifications are disabled in configuration" "notifications"
@@ -45,7 +84,7 @@ notification_system_init() {
 
   # Load enabled notification channels from configuration
   local notification_channels
-  notification_channels=$(config_get_value "notification_channels" "")
+  notification_channels=$(util_config_get_value "notification_channels" "")
 
   # Convert comma/space/brackets separated string to array
   local channel_list
@@ -140,7 +179,7 @@ send_notification() {
 
   # Check if notifications are enabled
   local notification_enabled
-  notification_enabled=$(config_get_value "notification_enabled" "false")
+  notification_enabled=$(util_config_get_value "notification_enabled" "false")
 
   if [ "$notification_enabled" != "true" ]; then
     log_debug "Notifications are disabled, skipping"

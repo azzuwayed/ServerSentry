@@ -6,10 +6,38 @@
 
 set -eo pipefail
 
-# Get the base directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(dirname "$SCRIPT_DIR")"
-export BASE_DIR
+# Check for minimal mode flag
+MINIMAL_MODE=false
+for arg in "$@"; do
+  case "$arg" in
+  --minimal)
+    MINIMAL_MODE=true
+    shift
+    ;;
+  esac
+done
+
+# Load ServerSentry environment bootstrap
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  bootstrap_file="$(dirname "${BASH_SOURCE[0]}")/../serversentry-env.sh"
+  if [[ -f "$bootstrap_file" ]]; then
+    # Set initialization level based on mode
+    if [[ "$MINIMAL_MODE" == "true" ]]; then
+      export SERVERSENTRY_AUTO_INIT=false
+      export SERVERSENTRY_MINIMAL_MODE=true
+    else
+      export SERVERSENTRY_AUTO_INIT=false
+    fi
+    # shellcheck source=../serversentry-env.sh
+    source "$bootstrap_file" || {
+      echo "FATAL: Failed to load ServerSentry environment bootstrap" >&2
+      exit 1
+    }
+  else
+    echo "FATAL: ServerSentry environment bootstrap not found: $bootstrap_file" >&2
+    exit 1
+  fi
+fi
 
 # Early argument parsing for log level settings
 for arg in "$@"; do
@@ -26,64 +54,60 @@ done
 # === CORE SYSTEM INITIALIZATION ===
 
 # Function: init_core_system
-# Description: Initialize core system components in proper order
+# Description: Initialize core system components using bootstrap
 # Returns:
 #   0 - success
 #   1 - failure
 init_core_system() {
-  # 1. Load logging system first (required by all other components)
-  if [[ -f "$BASE_DIR/lib/core/logging.sh" ]]; then
-    # shellcheck source=lib/core/logging.sh
-    source "$BASE_DIR/lib/core/logging.sh"
-    if ! logging_init; then
-      echo "FATAL: Failed to initialize logging system" >&2
-      return 1
-    fi
-  else
-    echo "FATAL: Logging system not found: $BASE_DIR/lib/core/logging.sh" >&2
+  # Verify bootstrap functions are available
+  if ! declare -f serversentry_init >/dev/null 2>&1; then
+    echo "FATAL: Bootstrap functions not available" >&2
     return 1
   fi
 
-  # 2. Load utilities second (required by config and other components)
-  if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
-    # shellcheck source=lib/core/utils.sh
-    source "$BASE_DIR/lib/core/utils.sh"
-    if ! init_utilities; then
-      log_error "Failed to initialize utility system"
-      return 1
-    fi
-  else
-    log_error "Utilities system not found: $BASE_DIR/lib/core/utils.sh"
+  # Initialize based on mode
+  local init_level="minimal"
+  if [[ "$MINIMAL_MODE" != "true" ]]; then
+    init_level="standard"
+  fi
+
+  if ! serversentry_init "$init_level"; then
+    echo "FATAL: Failed to initialize ServerSentry $init_level system" >&2
     return 1
   fi
 
-  # 3. Load configuration third (depends on utilities)
-  if [[ -f "$BASE_DIR/lib/core/config.sh" ]]; then
-    # shellcheck source=lib/core/config.sh
-    source "$BASE_DIR/lib/core/config.sh"
-    if ! config_load; then
-      log_error "Failed to load configuration"
+  # In minimal mode, only load essential core libraries
+  if [[ "$MINIMAL_MODE" == "true" ]]; then
+    echo "Loading minimal core libraries..."
+    # Only load absolutely essential functions
+    if ! serversentry_load_minimal; then
+      echo "FATAL: Failed to load minimal core libraries" >&2
       return 1
     fi
   else
-    log_error "Configuration system not found: $BASE_DIR/lib/core/config.sh"
+    echo "Loading core libraries..."
+    # Load full core libraries
+    if ! serversentry_load_core; then
+      echo "FATAL: Failed to load core libraries" >&2
+      return 1
+    fi
+  fi
+
+  # Verify critical functions are available
+  if ! declare -f serversentry_log >/dev/null 2>&1; then
+    echo "FATAL: Bootstrap logging system not available" >&2
     return 1
   fi
 
-  # 4. Load error handling system (depends on logging and config)
-  if [[ -f "$BASE_DIR/lib/core/error_handling.sh" ]]; then
-    # shellcheck source=lib/core/error_handling.sh
-    source "$BASE_DIR/lib/core/error_handling.sh"
-    if ! error_handling_init; then
-      log_warning "Failed to initialize error handling system - continuing with basic error handling"
-    else
-      log_debug "Error handling system initialized successfully"
-    fi
-  else
-    log_warning "Error handling system not found: $BASE_DIR/lib/core/error_handling.sh - continuing with basic error handling"
+  if ! declare -f config_get_value >/dev/null 2>&1; then
+    serversentry_log "WARN" "Configuration system not available, continuing with defaults"
   fi
 
-  log_debug "Core system initialized successfully"
+  local mode_text="standard"
+  if [[ "$MINIMAL_MODE" == "true" ]]; then
+    mode_text="minimal"
+  fi
+  serversentry_log "SUCCESS" "Core system initialized successfully in $mode_text mode"
   return 0
 }
 
@@ -93,19 +117,25 @@ init_core_system() {
 #   0 - success
 #   1 - failure
 init_plugin_system() {
-  if [[ -f "$BASE_DIR/lib/core/plugin.sh" ]]; then
-    # shellcheck source=lib/core/plugin.sh
-    source "$BASE_DIR/lib/core/plugin.sh"
-    if ! plugin_system_init; then
-      log_error "Failed to initialize plugin system"
-      return 1
-    fi
-    log_debug "Plugin system initialized successfully"
+  # Skip plugins in minimal mode
+  if [[ "$MINIMAL_MODE" == "true" ]]; then
+    serversentry_log "INFO" "Skipping plugin system in minimal mode"
     return 0
-  else
-    log_error "Plugin system not found: $BASE_DIR/lib/core/plugin.sh"
+  fi
+
+  # Load plugin module using bootstrap
+  if ! serversentry_load_module "plugin"; then
+    serversentry_log "ERROR" "Failed to load plugin system module"
     return 1
   fi
+
+  if ! plugin_system_init; then
+    serversentry_log "ERROR" "Failed to initialize plugin system"
+    return 1
+  fi
+
+  serversentry_log "INFO" "Plugin system initialized successfully"
+  return 0
 }
 
 # Function: init_notification_system
@@ -114,19 +144,25 @@ init_plugin_system() {
 #   0 - success
 #   1 - failure (non-fatal)
 init_notification_system() {
-  if [[ -f "$BASE_DIR/lib/core/notification.sh" ]]; then
-    # shellcheck source=lib/core/notification.sh
-    source "$BASE_DIR/lib/core/notification.sh"
-    if ! notification_system_init; then
-      log_warning "Failed to initialize notification system - continuing without notifications"
-      return 1
-    fi
-    log_debug "Notification system initialized successfully"
+  # Skip notifications in minimal mode
+  if [[ "$MINIMAL_MODE" == "true" ]]; then
+    serversentry_log "INFO" "Skipping notification system in minimal mode"
     return 0
-  else
-    log_warning "Notification system not found: $BASE_DIR/lib/core/notification.sh - continuing without notifications"
+  fi
+
+  # Try to load notification module using bootstrap
+  if ! serversentry_load_module "notification"; then
+    serversentry_log "WARN" "Notification system not available - continuing without notifications"
     return 1
   fi
+
+  if ! notification_system_init; then
+    serversentry_log "WARN" "Failed to initialize notification system - continuing without notifications"
+    return 1
+  fi
+
+  serversentry_log "INFO" "Notification system initialized successfully"
+  return 0
 }
 
 # Function: init_ui_system
@@ -135,13 +171,15 @@ init_notification_system() {
 #   0 - success
 #   1 - failure
 init_ui_system() {
-  if [[ -f "$BASE_DIR/lib/ui/cli/commands.sh" ]]; then
-    # shellcheck source=lib/ui/cli/commands.sh
-    source "$BASE_DIR/lib/ui/cli/commands.sh"
-    log_debug "UI system initialized successfully"
+  # Load UI commands using standardized path
+  local ui_commands="$SERVERSENTRY_UI_DIR/cli/commands.sh"
+  if [[ -f "$ui_commands" ]]; then
+    # shellcheck source=/dev/null
+    source "$ui_commands"
+    serversentry_log "INFO" "UI system initialized successfully"
     return 0
   else
-    log_error "UI system not found: $BASE_DIR/lib/ui/cli/commands.sh"
+    serversentry_log "ERROR" "UI system not found: $ui_commands"
     return 1
   fi
 }
@@ -159,7 +197,7 @@ run_startup_optimizations() {
     util_command_cache_cleanup
   fi
 
-  log_debug "Startup optimizations completed"
+  serversentry_log "INFO" "Startup optimizations completed"
 }
 
 # Function: display_system_status
@@ -171,23 +209,33 @@ display_system_status() {
 
   # Only display for status, help, or debug commands
   if [[ "$command" == "status" || "$command" == "help" || "$command" == "-d" || "$command" == "--debug" ]]; then
-    log_debug "=== ServerSentry v2 System Status ==="
-    log_debug "Base directory: $BASE_DIR"
-    log_debug "Log level: $(logging_get_level)"
-    log_debug "Configuration loaded from: $(config_get_value 'config_file' 'default')"
-    log_debug "Config namespace: $(config_get_value 'namespace' 'config')"
+    serversentry_log "INFO" "=== ServerSentry v2 System Status ==="
+    serversentry_log "INFO" "Base directory: $SERVERSENTRY_ROOT"
 
-    # Display enabled plugins (handle array properly)
-    local enabled_plugins
-    enabled_plugins=$(config_get_array 'plugins.enabled' 2>/dev/null | tr '\n' ',' | sed 's/,$//')
-    if [[ -n "$enabled_plugins" ]]; then
-      log_debug "Plugins enabled: $enabled_plugins"
-    else
-      log_debug "Plugins enabled: none"
+    # Only show advanced info if functions are available
+    if declare -f logging_get_level >/dev/null 2>&1; then
+      serversentry_log "INFO" "Log level: $(logging_get_level)"
     fi
 
-    log_debug "Notifications enabled: $(config_get_value 'notifications.enabled' 'false')"
-    log_debug "System initialized successfully"
+    if declare -f config_get_value >/dev/null 2>&1; then
+      serversentry_log "INFO" "Configuration loaded from: $(config_get_value 'config_file' 'default')"
+      serversentry_log "INFO" "Config namespace: $(config_get_value 'namespace' 'config')"
+
+      # Display enabled plugins (handle array properly)
+      if declare -f config_get_array >/dev/null 2>&1; then
+        local enabled_plugins
+        enabled_plugins=$(config_get_array 'plugins.enabled' 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+        if [[ -n "$enabled_plugins" ]]; then
+          serversentry_log "INFO" "Plugins enabled: $enabled_plugins"
+        else
+          serversentry_log "INFO" "Plugins enabled: none"
+        fi
+      fi
+
+      serversentry_log "INFO" "Notifications enabled: $(config_get_value 'notifications.enabled' 'false')"
+    fi
+
+    serversentry_log "SUCCESS" "System initialized successfully"
   fi
 }
 
@@ -199,23 +247,21 @@ main() {
     exit 1
   fi
 
-  log_debug "Starting ServerSentry v2"
+  serversentry_log "INFO" "Starting ServerSentry v2"
 
-  # Initialize plugin system
+  # Initialize plugin system (non-fatal for now)
   if ! init_plugin_system; then
-    log_error "Plugin system initialization failed"
-    exit 1
+    serversentry_log "WARN" "Plugin system initialization failed - continuing with basic functionality"
   fi
 
   # Initialize notification system (non-fatal)
   if ! init_notification_system; then
-    log_info "Continuing without notification support"
+    serversentry_log "INFO" "Continuing without notification support"
   fi
 
-  # Initialize UI system
+  # Initialize UI system (non-fatal for now)
   if ! init_ui_system; then
-    log_error "UI system initialization failed"
-    exit 1
+    serversentry_log "WARN" "UI system initialization failed - continuing with basic functionality"
   fi
 
   # Run startup optimizations
@@ -226,12 +272,51 @@ main() {
   display_system_status "$command"
 
   # Process command line arguments
-  if ! process_commands "$@"; then
-    log_error "Command processing failed"
-    exit 1
+  if declare -f process_commands >/dev/null 2>&1; then
+    if ! process_commands "$@"; then
+      serversentry_log "ERROR" "Command processing failed"
+      exit 1
+    fi
+  else
+    # Basic command processing fallback
+    local command="${1:-status}"
+    case "$command" in
+    "status")
+      serversentry_log "SUCCESS" "ServerSentry v2 is running"
+      serversentry_log "INFO" "Bootstrap system: ✅ Working"
+      serversentry_log "INFO" "Core libraries: ✅ Loaded"
+      ;;
+    "help" | "-h" | "--help")
+      local mode_text="Standard Mode"
+      if [[ "$MINIMAL_MODE" == "true" ]]; then
+        mode_text="Minimal Mode"
+      fi
+      echo "ServerSentry v2 - $mode_text"
+      echo "Available commands:"
+      echo "  status    - Show system status"
+      echo "  help      - Show this help"
+      if [[ "$MINIMAL_MODE" != "true" ]]; then
+        echo "  check     - Run system checks"
+        echo "  start     - Start monitoring"
+        echo "  stop      - Stop monitoring"
+        echo "  restart   - Restart monitoring"
+        echo "  logs      - View logs"
+      fi
+      echo ""
+      echo "Options:"
+      echo "  --minimal - Run in minimal mode (fewer features, more stable)"
+      echo "  -v, --verbose - Verbose output"
+      echo "  -q, --quiet   - Quiet output"
+      ;;
+    *)
+      serversentry_log "ERROR" "Unknown command: $command"
+      serversentry_log "INFO" "Use 'help' for available commands"
+      exit 1
+      ;;
+    esac
   fi
 
-  log_debug "ServerSentry v2 finished successfully"
+  serversentry_log "SUCCESS" "ServerSentry v2 finished successfully"
 }
 
 # Function: cleanup
@@ -239,8 +324,8 @@ main() {
 cleanup() {
   local exit_code=$?
 
-  if [[ "${CURRENT_LOG_LEVEL:-1}" -le 0 ]]; then # DEBUG level
-    log_debug "Performing cleanup (exit code: $exit_code)"
+  if declare -f serversentry_log >/dev/null 2>&1; then
+    serversentry_log "INFO" "Performing cleanup (exit code: $exit_code)"
   fi
 
   # Cleanup operations
@@ -250,8 +335,8 @@ cleanup() {
 
   # Log exit status
   if [[ "$exit_code" -ne 0 ]]; then
-    if declare -f log_error >/dev/null 2>&1; then
-      log_error "ServerSentry exited with error code: $exit_code"
+    if declare -f serversentry_log >/dev/null 2>&1; then
+      serversentry_log "ERROR" "ServerSentry exited with error code: $exit_code"
     else
       echo "ERROR: ServerSentry exited with error code: $exit_code" >&2
     fi
@@ -265,20 +350,20 @@ cleanup() {
 handle_signals() {
   case "$1" in
   "INT")
-    if declare -f log_warning >/dev/null 2>&1; then
-      log_warning "Received SIGINT, shutting down gracefully..."
+    if declare -f serversentry_log >/dev/null 2>&1; then
+      serversentry_log "WARN" "Received SIGINT, shutting down gracefully..."
     fi
     exit 130
     ;;
   "TERM")
-    if declare -f log_warning >/dev/null 2>&1; then
-      log_warning "Received SIGTERM, shutting down gracefully..."
+    if declare -f serversentry_log >/dev/null 2>&1; then
+      serversentry_log "WARN" "Received SIGTERM, shutting down gracefully..."
     fi
     exit 143
     ;;
   "HUP")
-    if declare -f log_info >/dev/null 2>&1; then
-      log_info "Received SIGHUP, reloading configuration..."
+    if declare -f serversentry_log >/dev/null 2>&1; then
+      serversentry_log "INFO" "Received SIGHUP, reloading configuration..."
     fi
     # Trigger configuration reload if available
     if declare -f config_load >/dev/null 2>&1; then

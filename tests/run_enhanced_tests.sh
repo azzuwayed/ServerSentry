@@ -7,17 +7,57 @@
 
 set -e
 
-# Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/.." &>/dev/null && pwd)"
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
 
-# Source test framework and helpers
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
+
+
+# Load unified test framework
+if [[ -f "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh"
+fi
+
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+# Initialize with minimal level for testing
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
+
+# Get the directory where the script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source test framework and helpers using bootstrap paths
 source "$SCRIPT_DIR/test_framework.sh"
 source "$SCRIPT_DIR/helpers/test_helpers.sh"
 
-# Source standardized color functions
-if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
-  source "$BASE_DIR/lib/ui/cli/colors.sh"
+# Source standardized color functions using bootstrap
+if [[ -f "$SERVERSENTRY_UI_DIR/cli/colors.sh" ]]; then
+  source "$SERVERSENTRY_UI_DIR/cli/colors.sh"
 fi
 
 # Test configuration
@@ -490,23 +530,6 @@ check_prerequisites() {
 }
 
 # Function to setup test environment
-setup_test_environment() {
-  print_info "Setting up enhanced test environment..."
-
-  # Ensure directories exist
-  mkdir -p "$SCRIPT_DIR"/{reports,fixtures,tmp}
-  mkdir -p "$BASE_DIR/logs"
-
-  # Clean up any previous test artifacts
-  rm -f "$BASE_DIR"/[0-9][0-9] 2>/dev/null || true
-  rm -f "$BASE_DIR/logs/test_"* 2>/dev/null || true
-
-  # Set up test environment variables
-  export TEST_MODE="true"
-  export TEST_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-
-  print_success "Test environment ready"
-}
 
 # Main function
 main() {

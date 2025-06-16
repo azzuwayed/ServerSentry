@@ -1,3 +1,9 @@
+
+# Load unified test framework
+if [[ -f "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh"
+fi
+
 #!/usr/bin/env bash
 #
 # ServerSentry v2 - Array Utils Tests
@@ -5,15 +11,13 @@
 # Comprehensive test suite for lib/core/utils/array_utils.sh
 
 # Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
 
 # Source the test framework
 source "$SCRIPT_DIR/../test_framework.sh"
 
 # Source required modules
-source "${BASE_DIR}/lib/core/utils/array_utils.sh"
-source "${BASE_DIR}/lib/core/logging.sh"
+source "${SERVERSENTRY_ROOT}/lib/core/utils/array_utils.sh"
+source "${SERVERSENTRY_ROOT}/lib/core/logging.sh"
 
 # Test configuration
 TEST_SUITE_NAME="Array Utilities Tests"
@@ -23,19 +27,7 @@ TESTS_FAILED=0
 
 # === HELPER FUNCTIONS FOR TESTING ===
 
-test_pass() {
-  local message="$1"
-  print_success "$message"
-  ((TESTS_PASSED++))
-  ((TESTS_RUN++))
-}
 
-test_fail() {
-  local message="$1"
-  print_error "$message"
-  ((TESTS_FAILED++))
-  ((TESTS_RUN++))
-}
 
 # Setup function
 setup_array_utils_tests() {

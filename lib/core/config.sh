@@ -4,14 +4,50 @@
 #
 # This module handles loading, parsing, and validating YAML configuration
 
-# Configuration settings
-CONFIG_DIR="${CONFIG_DIR:-${BASE_DIR}/config}"
+# Prevent multiple sourcing
+if [[ "${CONFIG_MODULE_LOADED:-}" == "true" ]]; then
+  return 0
+fi
+CONFIG_MODULE_LOADED=true
+export CONFIG_MODULE_LOADED
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+    current_dir="$(dirname "$current_dir")"
+  done
+
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+
+# Configuration settings using bootstrap paths
+CONFIG_DIR="${CONFIG_DIR:-${SERVERSENTRY_CONFIG_DIR}}"
 MAIN_CONFIG="${MAIN_CONFIG:-${CONFIG_DIR}/serversentry.yaml}"
 CONFIG_NAMESPACE="config"
 
-# Source utilities
-source "${BASE_DIR}/lib/core/logging.sh"
-source "${BASE_DIR}/lib/core/utils.sh"
+# Load required utilities
+if [[ -f "${SERVERSENTRY_UTILS_DIR}/../utils.sh" ]]; then
+  source "${SERVERSENTRY_UTILS_DIR}/../utils.sh"
+fi
+
+if [[ -f "${SERVERSENTRY_UTILS_DIR}/../utils.sh" ]]; then
+  source "${SERVERSENTRY_UTILS_DIR}/../utils.sh"
+fi
 
 # Configuration validation rules
 declare -a CONFIG_VALIDATION_RULES=(
@@ -163,13 +199,13 @@ notifications:
   enabled: true
   channels: []
   cooldown_period: 300  # 5 minutes between notifications
-  
+
   # Teams Integration
   teams:
     webhook_url: ""
     notification_title: "ServerSentry Alert"
     enabled: false
-  
+
   # Email Configuration
   email:
     enabled: false

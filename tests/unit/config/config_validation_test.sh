@@ -8,16 +8,55 @@ set -e
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/../../.." &>/dev/null && pwd)"
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
+
+
+# Load unified test framework
+if [[ -f "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh"
+fi
+
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
 
 # Source test framework and helpers
 source "$SCRIPT_DIR/../../test_framework.sh"
 source "$SCRIPT_DIR/../../helpers/test_helpers.sh"
 
 # Source required modules
-source "$BASE_DIR/lib/core/logging.sh"
-source "$BASE_DIR/lib/core/utils/config_utils.sh"
-source "$BASE_DIR/lib/core/utils/validation_utils.sh"
+source "$SERVERSENTRY_ROOT/lib/core/logging.sh"
+source "$SERVERSENTRY_ROOT/lib/core/utils/config_utils.sh"
+source "$SERVERSENTRY_ROOT/lib/core/utils/validation_utils.sh"
 
 # Test configuration
 TEST_SUITE_NAME="Configuration Validation Tests"
@@ -39,79 +78,6 @@ cleanup_config_validation_tests() {
 }
 
 # Helper function to create test config files
-create_test_config() {
-  local config_file="$1"
-  local config_type="$2"
-
-  case "$config_type" in
-  "valid_basic")
-    cat >"$config_file" <<EOF
-enabled: true
-log_level: info
-check_interval: 60
-timeout: 30
-
-monitoring:
-  cpu:
-    enabled: true
-    threshold: 80
-  memory:
-    enabled: true
-    threshold: 90
-  disk:
-    enabled: true
-    threshold: 95
-
-notifications:
-  email:
-    enabled: false
-  slack:
-    enabled: false
-  teams:
-    enabled: false
-EOF
-    ;;
-  "invalid_yaml")
-    cat >"$config_file" <<EOF
-enabled: true
-log_level: info
-invalid_yaml: [unclosed array
-missing_value:
-  nested:
-    incomplete
-EOF
-    ;;
-  "invalid_values")
-    cat >"$config_file" <<EOF
-enabled: "not_boolean"
-log_level: invalid_level
-check_interval: -10
-timeout: 0
-
-monitoring:
-  cpu:
-    enabled: true
-    threshold: 150
-  memory:
-    enabled: true
-    threshold: -5
-EOF
-    ;;
-  "missing_required")
-    cat >"$config_file" <<EOF
-log_level: info
-# Missing required 'enabled' field
-monitoring:
-  cpu:
-    threshold: 80
-    # Missing required 'enabled' field
-EOF
-    ;;
-  "empty")
-    touch "$config_file"
-    ;;
-  esac
-}
 
 # Test 1: Valid configuration validation
 test_valid_config_validation() {

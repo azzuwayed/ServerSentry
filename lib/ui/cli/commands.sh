@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 #
-# ServerSentry v2 - CLI Commands
+# ServerSentry v2 - CLI Commands (Modular)
 #
-# This module handles the command-line interface commands
+# This module orchestrates all CLI commands through modular components
+
+# Source modular command components
+source "${BASE_DIR}/lib/core/utils.sh"
+source "${BASE_DIR}/lib/ui/cli/commands/system.sh"
+source "${BASE_DIR}/lib/ui/cli/commands/plugins.sh"
+source "${BASE_DIR}/lib/ui/cli/commands/config.sh"
+source "${BASE_DIR}/lib/ui/cli/commands/advanced.sh"
+source "${BASE_DIR}/lib/ui/cli/commands/template.sh"
+source "${BASE_DIR}/lib/ui/cli/commands/composite.sh"
 
 # Source UI components
 if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
@@ -11,7 +20,38 @@ fi
 
 # Help text
 show_help() {
-  cat <<EOF
+  # Check if we're in minimal mode
+  if [[ "${SERVERSENTRY_MINIMAL_MODE:-}" == "true" ]]; then
+    cat <<EOF
+ServerSentry v2 - Server Monitoring Tool (Minimal Mode)
+
+Usage: serversentry --minimal [options] [command]
+
+Basic Commands:
+  status              Show current system status
+  help                Show this help message
+  version             Show version information
+  logs                View logs
+
+Options:
+  --minimal           Run in minimal mode (fewer features, more stable)
+  -v, --verbose       Enable verbose output
+  -q, --quiet         Suppress warning messages
+  -d, --debug         Enable debug mode
+  -h, --help          Show this help message
+
+Minimal Mode Features:
+  ✅ Basic system monitoring
+  ✅ Essential logging
+  ✅ Core status checks
+  ❌ Plugins disabled
+  ❌ Notifications disabled
+  ❌ Advanced features disabled
+
+To enable more features, run without --minimal flag.
+EOF
+  else
+    cat <<EOF
 ServerSentry v2 - Server Monitoring Tool
 
 Usage: serversentry [options] [command]
@@ -40,12 +80,14 @@ Commands:
   clear-cache         Clear all plugin cache and temporary files
 
 Options:
+  --minimal           Run in minimal mode (fewer features, more stable)
   -v, --verbose       Enable verbose output
   -q, --quiet         Suppress warning messages (for automation)
   -c, --config FILE   Use alternative config file
   -d, --debug         Enable debug mode
   -h, --help          Show this help message
 EOF
+  fi
 }
 
 # Process command line arguments
@@ -172,371 +214,8 @@ process_commands() {
   esac
 }
 
-# Command: status
-cmd_status() {
-  # Source colors if available
-  if [ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]; then
-    source "$BASE_DIR/lib/ui/cli/colors.sh"
-  fi
-
-  print_header "ServerSentry Status" 60
-
-  log_info "Checking system status..." "cli"
-
-  # Check if monitoring is running
-  if is_monitoring_running; then
-    print_status "ok" "Monitoring service is running"
-  else
-    print_status "warning" "Monitoring service is stopped"
-  fi
-
-  echo ""
-
-  # Run all plugin checks
-  log_debug "Running all plugin checks" "cli"
-  local results
-  results=$(run_all_plugin_checks)
-
-  # Parse and display results with colors
-  if [[ -n "$results" ]]; then
-    if util_command_exists jq; then
-      echo "$results" | jq -r '.[] | "\(.plugin)|\(.status_code)|\(.status_message)|\(.metrics.usage_percent // "N/A")|\(.metrics.threshold // "N/A")"' | while IFS='|' read -r plugin status_code message value threshold; do
-        if [[ -n "$plugin" ]]; then
-          case "$status_code" in
-          0)
-            print_status "ok" "$plugin: $message"
-            if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
-              create_metric_bar "$value" "$threshold" "  └─ Usage"
-            fi
-            ;;
-          1)
-            print_status "warning" "$plugin: $message"
-            if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
-              create_metric_bar "$value" "$threshold" "  └─ Usage"
-            fi
-            ;;
-          2)
-            print_status "error" "$plugin: $message"
-            if [[ "$value" != "N/A" && "$threshold" != "N/A" ]]; then
-              create_metric_bar "$value" "$threshold" "  └─ Usage"
-            fi
-            ;;
-          *)
-            print_status "info" "$plugin: $message"
-            ;;
-          esac
-        fi
-      done
-    else
-      # Fallback display without jq
-      log_warning "jq not available, using fallback display" "cli"
-      echo "$results"
-    fi
-  else
-    echo "No plugin results available"
-  fi
-
-  print_separator
-  echo ""
-}
-
-# Command: start
-cmd_start() {
-  log_info "Starting monitoring..." "cli"
-  log_audit "start_monitoring" "${USER:-unknown}" "User initiated monitoring start via CLI"
-
-  # Check if already running
-  if is_monitoring_running; then
-    log_warning "Monitoring is already running" "cli"
-    return 0
-  fi
-
-  # Start the monitoring process in the background
-  nohup "$BASE_DIR/bin/serversentry" monitor >/dev/null 2>&1 &
-  echo $! >"${BASE_DIR}/serversentry.pid"
-
-  log_info "Monitoring started with PID $(cat "${BASE_DIR}/serversentry.pid")" "cli"
-  log_audit "monitoring_started" "${USER:-unknown}" "PID=$(cat "${BASE_DIR}/serversentry.pid" 2>/dev/null)"
-}
-
-# Command: stop
-cmd_stop() {
-  log_info "Stopping monitoring..." "cli"
-  log_audit "stop_monitoring" "${USER:-unknown}" "User initiated monitoring stop via CLI"
-
-  # Check if running
-  if ! is_monitoring_running; then
-    log_warning "Monitoring is not running" "cli"
-    return 0
-  fi
-
-  # Get PID
-  local pid
-  pid=$(cat "${BASE_DIR}/serversentry.pid" 2>/dev/null)
-
-  if [ -n "$pid" ]; then
-    # Kill the process
-    kill "$pid" 2>/dev/null
-    rm -f "${BASE_DIR}/serversentry.pid"
-    log_info "Monitoring stopped" "cli"
-    log_audit "monitoring_stopped" "${USER:-unknown}" "PID=$pid"
-  else
-    log_error "Could not find monitoring PID" "cli"
-    return 1
-  fi
-}
-
-# Command: check
-cmd_check() {
-  local plugin_name="$1"
-
-  if [ -z "$plugin_name" ]; then
-    # Check all plugins
-    log_info "Running all plugin checks..." "cli"
-    log_audit "check_all_plugins" "${USER:-unknown}" "User requested all plugin checks"
-    if util_command_exists jq; then
-      run_all_plugin_checks | jq
-    else
-      run_all_plugin_checks
-    fi
-  else
-    # Check specific plugin
-    log_info "Running check for plugin: $plugin_name" "cli"
-    log_audit "check_plugin" "${USER:-unknown}" "plugin=$plugin_name"
-    if is_plugin_registered "$plugin_name"; then
-      if util_command_exists jq; then
-        run_plugin_check "$plugin_name" | jq
-      else
-        run_plugin_check "$plugin_name"
-      fi
-    else
-      log_error "Plugin not found: $plugin_name" "cli"
-      echo "Available plugins:"
-      list_plugins
-      return 1
-    fi
-  fi
-}
-
-# Command: list
-cmd_list() {
-  log_info "Listing available plugins..." "cli"
-  list_plugins
-}
-
-# Command: configure
-cmd_configure() {
-  log_info "Opening configuration..." "cli"
-  log_audit "edit_config" "${USER:-unknown}" "User opened configuration file for editing"
-
-  # Open with default editor
-  ${EDITOR:-vi} "$MAIN_CONFIG"
-
-  log_audit "config_edit_completed" "${USER:-unknown}" "Configuration editing session completed"
-}
-
-# Command: logs
-cmd_logs() {
-  local subcommand="${1:-view}"
-
-  case "$subcommand" in
-  view)
-    # View logs
-    log_audit "view_logs" "${USER:-unknown}" "User viewed log file"
-    tail -n 50 "$LOG_FILE"
-    ;;
-  rotate)
-    # Rotate logs
-    log_audit "rotate_logs" "${USER:-unknown}" "User manually rotated logs"
-    rotate_logs
-    ;;
-  clear)
-    # Clear logs
-    log_warning "Clearing logs..." "cli"
-    log_audit "clear_logs" "${USER:-unknown}" "User cleared log file"
-    >"$LOG_FILE"
-    ;;
-  *)
-    log_error "Unknown logs subcommand: $subcommand" "cli"
-    echo "Available subcommands: view, rotate, clear"
-    return 1
-    ;;
-  esac
-}
-
-# Command: version
-cmd_version() {
-  echo "ServerSentry v2.0.0"
-  echo "Plugin Interface v${PLUGIN_INTERFACE_VERSION}"
-}
-
-# Check if monitoring is running
-is_monitoring_running() {
-  local pid_file="${BASE_DIR}/serversentry.pid"
-
-  if [ -f "$pid_file" ]; then
-    local pid
-    pid=$(cat "$pid_file" 2>/dev/null)
-
-    if [ -n "$pid" ] && ps -p "$pid" >/dev/null; then
-      return 0 # Running
-    fi
-  fi
-
-  return 1 # Not running
-}
-
-cmd_tui() {
-  log_info "Launching TUI..." "cli"
-  "$BASE_DIR/lib/ui/tui/tui.sh"
-}
-
-# Command: webhook
-cmd_webhook() {
-  local subcommand="$1"
-  shift
-  case "$subcommand" in
-  add)
-    local url="$1"
-    if [ -z "$url" ]; then
-      echo "Usage: serversentry webhook add <URL>"
-      return 1
-    fi
-    # Add webhook to generic webhook config
-    local webhook_config="$BASE_DIR/config/notifications/webhook.conf"
-
-    # Create config directory if it doesn't exist
-    mkdir -p "$(dirname "$webhook_config")"
-
-    # Check if webhook already exists
-    if [ -f "$webhook_config" ] && grep -q "webhook_url=\"$url\"" "$webhook_config"; then
-      echo "Webhook already configured: $url"
-      return 0
-    fi
-
-    # Add webhook URL to config
-    echo "webhook_url=\"$url\"" >>"$webhook_config"
-    echo "Webhook added: $url"
-    ;;
-  remove)
-    local index="$1"
-    if [ -z "$index" ]; then
-      echo "Usage: serversentry webhook remove <INDEX>"
-      echo "Use 'serversentry webhook list' to see webhook indices"
-      return 1
-    fi
-    # Remove webhook by clearing the config (simple approach for now)
-    local webhook_config="$BASE_DIR/config/notifications/webhook.conf"
-    if [ -f "$webhook_config" ]; then
-      # Backup and clear webhook URL
-      cp "$webhook_config" "$webhook_config.bak"
-      compat_sed_inplace '/^webhook_url=/d' "$webhook_config"
-      echo "Webhook configuration cleared."
-    else
-      echo "No webhook configuration found."
-    fi
-    ;;
-  list)
-    echo "Configured webhooks:"
-    local webhook_config="$BASE_DIR/config/notifications/webhook.conf"
-    if [[ -f "$webhook_config" ]]; then
-      local webhook_urls
-      webhook_urls=$(grep "^webhook_url=" "$webhook_config" 2>/dev/null || true)
-      if [[ -n "$webhook_urls" ]]; then
-        echo "$webhook_urls" | cut -d'"' -f2 | nl -w2 -s'. '
-      else
-        echo "No webhooks configured."
-      fi
-    else
-      echo "No webhooks configured."
-    fi
-    ;;
-  test)
-    echo "Testing configured webhooks..."
-
-    # Source the webhook provider
-    if [ -f "$BASE_DIR/lib/notifications/webhook/webhook.sh" ]; then
-      source "$BASE_DIR/lib/notifications/webhook/webhook.sh"
-
-      # Initialize the webhook provider
-      webhook_provider_init
-
-      # Configure from config file
-      local webhook_config="$BASE_DIR/config/notifications/webhook.conf"
-      if [ -f "$webhook_config" ]; then
-        webhook_provider_configure "$webhook_config"
-      fi
-
-      # Test the webhook
-      if webhook_provider_test; then
-        echo "✅ Webhook test completed successfully"
-      else
-        echo "❌ Webhook test failed"
-        return 1
-      fi
-    else
-      echo "❌ Webhook provider not found"
-      return 1
-    fi
-    ;;
-  status)
-    # Show webhook configuration status
-    if [ -f "$BASE_DIR/lib/notifications/webhook/webhook.sh" ]; then
-      source "$BASE_DIR/lib/notifications/webhook/webhook.sh"
-      webhook_provider_init
-      local webhook_config="$BASE_DIR/config/notifications/webhook.conf"
-      if [ -f "$webhook_config" ]; then
-        webhook_provider_configure "$webhook_config"
-      fi
-      webhook_provider_status
-    else
-      echo "Webhook provider not available"
-    fi
-    ;;
-  *)
-    echo "Usage: serversentry webhook [add|remove|list|test|status] ..."
-    echo ""
-    echo "Commands:"
-    echo "  add <URL>     Add a webhook URL"
-    echo "  remove <IDX>  Remove webhook by index"
-    echo "  list          List all configured webhooks"
-    echo "  test          Test webhook connectivity"
-    echo "  status        Show webhook configuration status"
-    return 1
-    ;;
-  esac
-}
-
-# Command: update-threshold
-cmd_update_threshold() {
-  local param="$1"
-  if [ -z "$param" ]; then
-    echo "Usage: serversentry update-threshold NAME=VALUE"
-    return 1
-  fi
-  local name="$(echo "$param" | cut -d= -f1)"
-  local value="$(echo "$param" | cut -d= -f2)"
-  if [ -z "$name" ] || [ -z "$value" ]; then
-    echo "Invalid format. Use NAME=VALUE."
-    return 1
-  fi
-  # Update in YAML config (serversentry.yaml)
-  # Use yq if available, else sed
-  if util_command_exists yq; then
-    yq -i ".${name} = ${value}" "$MAIN_CONFIG"
-    echo "Updated $name to $value in $MAIN_CONFIG"
-  else
-    # Fallback: naive sed (may not work for all YAML)
-    compat_sed_inplace "/^${name}:/c\${name}: ${value}" "$MAIN_CONFIG"
-    echo "Updated $name to $value in $MAIN_CONFIG (sed)"
-  fi
-}
-
-# Command: list-thresholds
-cmd_list_thresholds() {
-  echo "Current thresholds and configuration:"
-  grep -E 'threshold|interval|timeout|max_|min_' "$MAIN_CONFIG"
-}
+# === LEGACY COMMAND IMPLEMENTATIONS ===
+# These commands are not yet modularized and remain in the main file
 
 # Command: template
 cmd_template() {
@@ -916,319 +595,6 @@ cmd_anomaly() {
   esac
 }
 
-# Command: reload
-cmd_reload() {
-  local subcommand="${1:-config}"
-  shift
-
-  # Source the reload system
-  if [ -f "$BASE_DIR/lib/core/reload.sh" ]; then
-    source "$BASE_DIR/lib/core/reload.sh"
-  else
-    echo "❌ Reload system not available"
-    return 1
-  fi
-
-  case "$subcommand" in
-  config)
-    echo "Sending configuration reload signal..."
-    send_reload_signal "config"
-    ;;
-  plugin | plugins)
-    echo "Sending plugin reload signal..."
-    send_reload_signal "plugin"
-    ;;
-  logs)
-    echo "Sending log rotation signal..."
-    send_reload_signal "logs"
-    ;;
-  status)
-    show_reload_status
-    ;;
-  history)
-    local lines="${1:-10}"
-    get_reload_history "$lines"
-    ;;
-  *)
-    echo "Usage: serversentry reload [config|plugin|logs|status|history] ..."
-    echo ""
-    echo "Commands:"
-    echo "  config              Reload configuration without restart (SIGUSR1)"
-    echo "  plugin              Reload plugins without restart (SIGUSR2)"
-    echo "  logs                Rotate logs (SIGHUP)"
-    echo "  status              Show current reload status"
-    echo "  history [lines]     Show reload history (default: 10 lines)"
-    echo ""
-    echo "Note: ServerSentry must be running for reload commands to work"
-    return 1
-    ;;
-  esac
-}
-
-# Command: diagnostics
-cmd_diagnostics() {
-  local subcommand="${1:-run}"
-  shift
-
-  # Source the diagnostics system
-  if [ -f "$BASE_DIR/lib/core/diagnostics.sh" ]; then
-    source "$BASE_DIR/lib/core/diagnostics.sh"
-    diagnostics_system_init
-  else
-    echo "❌ Diagnostics system not available"
-    return 1
-  fi
-
-  case "$subcommand" in
-  run)
-    echo "Running full system diagnostics..."
-    echo "This may take a few moments..."
-    echo ""
-
-    if diagnostics_run_full; then
-      echo ""
-      echo "✅ Diagnostics completed successfully"
-    else
-      local exit_code=$?
-      echo ""
-      case $exit_code in
-      1) echo "⚠️ Diagnostics completed with warnings" ;;
-      2) echo "❌ Diagnostics completed with errors" ;;
-      3) echo "🚨 Diagnostics found critical issues" ;;
-      *) echo "❓ Diagnostics completed with unknown status" ;;
-      esac
-    fi
-    ;;
-  summary)
-    local days="${1:-7}"
-    get_diagnostic_summary "$days"
-    ;;
-  quick)
-    echo "Running quick diagnostics..."
-
-    # Source colors for better output
-    if [ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]; then
-      source "$BASE_DIR/lib/ui/cli/colors.sh"
-    fi
-
-    # Quick system checks
-    echo ""
-    print_header "Quick System Diagnostics" 40
-
-    # Check disk space
-    local disk_usage
-    disk_usage=$(df "$BASE_DIR" | awk 'NR==2 {print $5}' | sed 's/%//')
-    if [ "$disk_usage" -ge 90 ]; then
-      print_status "error" "Disk usage: ${disk_usage}% (High)"
-    elif [ "$disk_usage" -ge 75 ]; then
-      print_status "warning" "Disk usage: ${disk_usage}% (Moderate)"
-    else
-      print_status "ok" "Disk usage: ${disk_usage}%"
-    fi
-
-    # Check memory
-    local memory_usage
-    # Use cross-platform method to get memory usage
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      # macOS
-      local vm_stat_output
-      vm_stat_output=$(vm_stat)
-      local page_size
-      page_size=$(pagesize)
-
-      local pages_active pages_inactive pages_speculative pages_wired pages_free
-      pages_active=$(echo "$vm_stat_output" | awk '/Pages active:/ {print $3}' | tr -d '.')
-      pages_inactive=$(echo "$vm_stat_output" | awk '/Pages inactive:/ {print $3}' | tr -d '.')
-      pages_speculative=$(echo "$vm_stat_output" | awk '/Pages speculative:/ {print $3}' | tr -d '.')
-      pages_wired=$(echo "$vm_stat_output" | awk '/Pages wired down:/ {print $4}' | tr -d '.')
-      pages_free=$(echo "$vm_stat_output" | awk '/Pages free:/ {print $3}' | tr -d '.')
-
-      local total_pages used_pages
-      total_pages=$((pages_active + pages_inactive + pages_speculative + pages_wired + pages_free))
-      used_pages=$((pages_active + pages_inactive + pages_wired))
-
-      if [ "$total_pages" -gt 0 ]; then
-        memory_usage=$(echo "scale=0; $used_pages * 100 / $total_pages" | bc 2>/dev/null || echo "0")
-      else
-        memory_usage=0
-      fi
-    elif util_command_exists free; then
-      # Linux
-      memory_usage=$(free | awk 'NR==2{printf "%.0f", $3*100/$2}')
-    else
-      memory_usage=0
-    fi
-
-    if [ "$memory_usage" -ge 90 ]; then
-      print_status "error" "Memory usage: ${memory_usage}% (High)"
-    elif [ "$memory_usage" -ge 75 ]; then
-      print_status "warning" "Memory usage: ${memory_usage}% (Moderate)"
-    else
-      print_status "ok" "Memory usage: ${memory_usage}%"
-    fi
-
-    # Check if monitoring is running
-    if is_monitoring_running; then
-      print_status "ok" "Monitoring service is running"
-    else
-      print_status "warning" "Monitoring service is stopped"
-    fi
-
-    # Check required commands
-    local missing_cmds=()
-    local required_commands=("ps" "grep" "awk" "sed" "jq")
-    for cmd in "${required_commands[@]}"; do
-      if ! util_command_exists "$cmd"; then
-        missing_cmds+=("$cmd")
-      fi
-    done
-
-    if [ ${#missing_cmds[@]} -eq 0 ]; then
-      print_status "ok" "All required commands available"
-    else
-      print_status "warning" "Missing commands: ${missing_cmds[*]}"
-    fi
-
-    # Check configuration file
-    if [ -f "$MAIN_CONFIG" ]; then
-      print_status "ok" "Configuration file exists"
-    else
-      print_status "error" "Configuration file missing"
-    fi
-
-    print_separator
-    echo ""
-    ;;
-  config)
-    echo "Editing diagnostics configuration..."
-    if [ -f "$DIAGNOSTICS_CONFIG_FILE" ]; then
-      ${EDITOR:-vi} "$DIAGNOSTICS_CONFIG_FILE"
-    else
-      echo "❌ Diagnostics configuration file not found: $DIAGNOSTICS_CONFIG_FILE"
-      echo "Run 'serversentry diagnostics run' first to create default configuration."
-      return 1
-    fi
-    ;;
-  reports)
-    echo "Available diagnostic reports:"
-    echo "============================="
-
-    if [ -d "$DIAGNOSTICS_REPORT_DIR" ]; then
-      local report_count=0
-      for report in "$DIAGNOSTICS_REPORT_DIR"/*.json; do
-        if [ -f "$report" ]; then
-          local filename
-          filename=$(basename "$report")
-          local file_date
-          file_date=$(echo "$filename" | grep -o '[0-9]\{8\}_[0-9]\{6\}' | head -1)
-          local formatted_date
-          formatted_date=$(echo "$file_date" | sed 's/_/ /' | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\) \([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1-\2-\3 \4:\5:\6/')
-
-          echo "• $filename ($formatted_date)"
-          report_count=$((report_count + 1))
-        fi
-      done
-
-      if [ "$report_count" -eq 0 ]; then
-        echo "No diagnostic reports found."
-        echo "Run 'serversentry diagnostics run' to generate a report."
-      else
-        echo ""
-        echo "Total reports: $report_count"
-      fi
-    else
-      echo "Diagnostics report directory not found."
-    fi
-    ;;
-  view)
-    local report_file="$1"
-    if [ -z "$report_file" ]; then
-      # Show the most recent report
-      if [ -d "$DIAGNOSTICS_REPORT_DIR" ]; then
-        report_file=$(find "$DIAGNOSTICS_REPORT_DIR" -name "*.json" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
-      fi
-    else
-      # If just a basename is provided, look in the report directory
-      if [[ "$report_file" != */* ]]; then
-        report_file="$DIAGNOSTICS_REPORT_DIR/$report_file"
-      fi
-    fi
-
-    if [ -n "$report_file" ] && [ -f "$report_file" ]; then
-      echo "Viewing diagnostic report: $(basename "$report_file")"
-      echo "========================================"
-
-      if util_command_exists jq; then
-        # Pretty print with jq if available
-        jq '.' "$report_file"
-      else
-        # Fallback to cat
-        cat "$report_file"
-      fi
-    else
-      echo "❌ Diagnostic report not found: $report_file"
-      echo ""
-      echo "Available reports:"
-      "$0" diagnostics reports
-      return 1
-    fi
-    ;;
-  cleanup)
-    local days="${1:-30}"
-    echo "Cleaning up diagnostic reports older than $days days..."
-    cleanup_diagnostic_reports "$days"
-    echo "✅ Cleanup completed"
-    ;;
-  *)
-    echo "Usage: serversentry diagnostics [run|summary|quick|config|reports|view|cleanup] ..."
-    echo ""
-    echo "Commands:"
-    echo "  run                         Run full system diagnostics"
-    echo "  quick                       Run quick diagnostic checks"
-    echo "  summary [days]              Show diagnostic summary (default: 7 days)"
-    echo "  config                      Edit diagnostics configuration"
-    echo "  reports                     List available diagnostic reports"
-    echo "  view [report_file]          View diagnostic report (latest if not specified)"
-    echo "  cleanup [days]              Clean up old reports (default: 30 days)"
-    echo ""
-    echo "Examples:"
-    echo "  serversentry diagnostics run"
-    echo "  serversentry diagnostics quick"
-    echo "  serversentry diagnostics summary 14"
-    echo "  serversentry diagnostics view"
-    echo "  serversentry diagnostics cleanup 60"
-    return 1
-    ;;
-  esac
-}
-
-# Command: monitor
-cmd_monitor() {
-  log_info "Starting continuous monitoring..."
-
-  # Source periodic monitoring system
-  if [ -f "$BASE_DIR/lib/core/periodic.sh" ]; then
-    source "$BASE_DIR/lib/core/periodic.sh"
-  fi
-
-  # Get monitoring interval from config (default 60 seconds)
-  local interval="${MONITOR_INTERVAL:-60}"
-
-  # Continuous monitoring loop
-  while true; do
-    log_debug "Running monitoring cycle..."
-
-    # Run all plugin checks
-    run_all_plugin_checks >/dev/null 2>&1
-
-    # Run periodic tasks
-    run_periodic_monitoring >/dev/null 2>&1
-
-    # Sleep for the specified interval
-    sleep "$interval"
-  done
-}
-
 # Command: logging
 cmd_logging() {
   local subcommand="${1:-status}"
@@ -1437,42 +803,6 @@ cmd_logging() {
   esac
 }
 
-# Command: clear-cache
-cmd_clear_cache() {
-  echo "Clearing all plugin cache and temporary files..."
-  log_audit "clear_cache" "${USER:-unknown}" "User requested cache clearing via CLI"
-
-  # Clear plugin cache if function is available
-  if declare -f plugin_clear_cache >/dev/null 2>&1; then
-    if plugin_clear_cache; then
-      echo "✅ Plugin cache cleared successfully"
-    else
-      echo "❌ Failed to clear plugin cache"
-      return 1
-    fi
-  else
-    echo "❌ Plugin cache clearing function not available"
-    return 1
-  fi
-
-  # Also clear any command cache if available
-  if declare -f util_command_cache_cleanup >/dev/null 2>&1; then
-    util_command_cache_cleanup
-    echo "✅ Command cache cleared"
-  fi
-
-  # Clear any temporary files in the base temp directory
-  local temp_files_count
-  temp_files_count=$(find "${BASE_DIR}/tmp" -name "*.tmp" -o -name "temp_*" -o -name "*_temp" 2>/dev/null | wc -l)
-  if [[ "$temp_files_count" -gt 0 ]]; then
-    find "${BASE_DIR}/tmp" -name "*.tmp" -o -name "temp_*" -o -name "*_temp" -delete 2>/dev/null || true
-    echo "✅ Cleaned up $temp_files_count temporary files"
-  fi
-
-  echo ""
-  echo "Cache clearing completed. You may want to run 'serversentry list' to verify plugins reload correctly."
-}
-
 # === PLUGIN INTERFACE FUNCTIONS ===
 # These functions provide a clean interface to the plugin system
 
@@ -1481,6 +811,18 @@ cmd_clear_cache() {
 # Returns:
 #   JSON results via stdout
 run_all_plugin_checks() {
+  # Check if we're in minimal mode or if plugin system is not available
+  if [[ "${SERVERSENTRY_MINIMAL_MODE:-}" == "true" ]]; then
+    echo '{"status": "skipped", "reason": "minimal_mode", "plugins": []}'
+    return 0
+  fi
+
+  # Check if plugin function is available
+  if ! declare -f plugin_run_all_checks >/dev/null 2>&1; then
+    echo '{"status": "unavailable", "reason": "plugin_system_not_loaded", "plugins": []}'
+    return 0
+  fi
+
   plugin_run_all_checks
 }
 
@@ -1493,6 +835,17 @@ run_all_plugin_checks() {
 #   1 - plugin is not registered
 is_plugin_registered() {
   local plugin_name="$1"
+
+  # In minimal mode, no plugins are registered
+  if [[ "${SERVERSENTRY_MINIMAL_MODE:-}" == "true" ]]; then
+    return 1
+  fi
+
+  # Check if plugin function is available
+  if ! declare -f plugin_is_loaded >/dev/null 2>&1; then
+    return 1
+  fi
+
   plugin_is_loaded "$plugin_name"
 }
 
@@ -1501,6 +854,18 @@ is_plugin_registered() {
 # Returns:
 #   Plugin list via stdout
 list_plugins() {
+  # In minimal mode, no plugins are loaded
+  if [[ "${SERVERSENTRY_MINIMAL_MODE:-}" == "true" ]]; then
+    echo "No plugins loaded (minimal mode)"
+    return 0
+  fi
+
+  # Check if plugin function is available
+  if ! declare -f plugin_list_loaded >/dev/null 2>&1; then
+    echo "Plugin system not available"
+    return 0
+  fi
+
   plugin_list_loaded
 }
 
@@ -1512,5 +877,18 @@ list_plugins() {
 #   JSON result via stdout
 run_plugin_check() {
   local plugin_name="$1"
+
+  # In minimal mode, no plugins are available
+  if [[ "${SERVERSENTRY_MINIMAL_MODE:-}" == "true" ]]; then
+    echo '{"status": "skipped", "reason": "minimal_mode", "plugin": "'"$plugin_name"'"}'
+    return 0
+  fi
+
+  # Check if plugin function is available
+  if ! declare -f plugin_run_check >/dev/null 2>&1; then
+    echo '{"status": "unavailable", "reason": "plugin_system_not_loaded", "plugin": "'"$plugin_name"'"}'
+    return 0
+  fi
+
   plugin_run_check "$plugin_name"
 }

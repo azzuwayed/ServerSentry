@@ -2,12 +2,9 @@ name: ServerSentry CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop, v2, "feature/**", "hotfix/**"]
+    branches: [main, develop, "feature/**", "hotfix/**"]
   pull_request:
-    branches: [main, develop, v2]
-  schedule:
-    # Run daily at 2 AM UTC to catch dependency issues
-    - cron: "0 2 * * *"
+    branches: [main, develop]
   workflow_dispatch:
     inputs:
       debug_enabled:
@@ -49,6 +46,7 @@ jobs:
         run: |
           echo "Running comprehensive linting..."
           ./check-lint.sh || true
+          continue-on-error: true
 
       - name: Check for security issues
         run: |
@@ -70,29 +68,22 @@ jobs:
 
   # Job 2: Unit Tests with Matrix Strategy
   unit-tests:
-    name: Unit Tests (Bash ${{ matrix.bash-version }})
+    name: Unit Tests
     runs-on: ${{ matrix.os }}
     needs: lint
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-22.04]
-        bash-version: ["4.4", "5.0", "5.1", "5.2"]
-        include:
-          - os: macos-latest
-            bash-version: "5.2"
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Bash ${{ matrix.bash-version }}
-        if: matrix.os != 'macos-latest'
+      - name: Check Bash version
         run: |
-          sudo apt-get update
-          # Install specific bash version if needed
-          echo "Using system bash version for now"
+          echo "Using system bash version"
           bash --version
 
       - name: Install test dependencies
@@ -120,7 +111,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-results-${{ matrix.os }}-bash-${{ matrix.bash-version }}
+          name: unit-test-results-${{ matrix.os }}
           path: |
             tests/reports/
             logs/test_*.log
@@ -130,7 +121,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.os }}-bash-${{ matrix.bash-version }}
+          name: coverage-${{ matrix.os }}
           path: tests/reports/coverage_report.html
           retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
 

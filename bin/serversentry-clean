@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#
+# ServerSentry Clean Runner
+#
+# This script cleans up environment variables and runs ServerSentry commands
+# to prevent issues with persistent environment variables during development
+
+# Clean up environment variables that can cause issues
+unset SERVERSENTRY_ENV_LOADED
+unset DIAGNOSTICS_STUB_LOADED
+unset PRINT_UTILS_LOADED
+unset TEST_FRAMEWORK_LOADED
+
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Run the main serversentry binary with all arguments
+exec "$SCRIPT_DIR/serversentry" "$@"

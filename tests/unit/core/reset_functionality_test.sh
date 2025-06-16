@@ -6,14 +6,53 @@
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/../../.." &>/dev/null && pwd)"
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
+
+
+# Load unified test framework
+if [[ -f "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh"
+fi
+
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
 
 # Source test framework
 source "$SCRIPT_DIR/../../test_framework.sh"
 
 # Test configuration
 TEST_NAME="reset_functionality"
-RESET_SCRIPT="$BASE_DIR/tests/reset_serversentry.sh"
+RESET_SCRIPT="$SERVERSENTRY_ROOT/tests/reset_serversentry.sh"
 
 # Setup function
 setup_reset_functionality_tests() {
@@ -27,12 +66,12 @@ cleanup_reset_functionality_tests() {
   log_info "Cleaning up reset functionality tests..."
 
   # Clean up any remaining test files
-  rm -f "$BASE_DIR/serversentry.pid" 2>/dev/null || true
-  rm -f "$BASE_DIR/logs/serversentry.log" 2>/dev/null || true
-  rm -f "$BASE_DIR/logs/error.log" 2>/dev/null || true
-  rm -f "$BASE_DIR/tmp/plugin_test_cache" 2>/dev/null || true
-  rm -f "$BASE_DIR/tmp/temp_test_file" 2>/dev/null || true
-  rm -f "$BASE_DIR/config/test_config.yaml" 2>/dev/null || true
+  rm -f "$SERVERSENTRY_ROOT/serversentry.pid" 2>/dev/null || true
+  rm -f "$SERVERSENTRY_ROOT/logs/serversentry.log" 2>/dev/null || true
+  rm -f "$SERVERSENTRY_ROOT/logs/error.log" 2>/dev/null || true
+  rm -f "$SERVERSENTRY_ROOT/tmp/plugin_test_cache" 2>/dev/null || true
+  rm -f "$SERVERSENTRY_ROOT/tmp/temp_test_file" 2>/dev/null || true
+  rm -f "$SERVERSENTRY_ROOT/config/test_config.yaml" 2>/dev/null || true
 
   cleanup_test_environment
 }
@@ -78,8 +117,8 @@ test_reset_script_dry_run() {
   TESTS_RUN=$((TESTS_RUN + 1))
 
   # Create test files first
-  echo "test content" >"$BASE_DIR/logs/serversentry.log"
-  echo "12345" >"$BASE_DIR/serversentry.pid"
+  echo "test content" >"$SERVERSENTRY_ROOT/logs/serversentry.log"
+  echo "12345" >"$SERVERSENTRY_ROOT/serversentry.pid"
 
   local dry_run_output
   dry_run_output=$("$RESET_SCRIPT" --dry-run 2>&1)
@@ -87,7 +126,7 @@ test_reset_script_dry_run() {
 
   if [[ $exit_code -eq 0 ]] && [[ "$dry_run_output" == *"DRY RUN"* ]] && [[ "$dry_run_output" == *"no actual changes were made"* ]]; then
     # Verify files still exist after dry run
-    if [[ -f "$BASE_DIR/logs/serversentry.log" ]] && [[ -f "$BASE_DIR/serversentry.pid" ]]; then
+    if [[ -f "$SERVERSENTRY_ROOT/logs/serversentry.log" ]] && [[ -f "$SERVERSENTRY_ROOT/serversentry.pid" ]]; then
       print_success "Reset script dry-run functionality works correctly"
       TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -100,7 +139,7 @@ test_reset_script_dry_run() {
   fi
 
   # Clean up test files
-  rm -f "$BASE_DIR/logs/serversentry.log" "$BASE_DIR/serversentry.pid"
+  rm -f "$SERVERSENTRY_ROOT/logs/serversentry.log" "$SERVERSENTRY_ROOT/serversentry.pid"
 }
 
 # Test 4: Reset script force mode (actual reset)
@@ -110,9 +149,9 @@ test_reset_script_force_mode() {
   TESTS_RUN=$((TESTS_RUN + 1))
 
   # Create test files to be cleaned up
-  echo "test log content" >"$BASE_DIR/logs/serversentry.log"
-  echo "test cache" >"$BASE_DIR/tmp/plugin_test_cache"
-  echo "12345" >"$BASE_DIR/serversentry.pid"
+  echo "test log content" >"$SERVERSENTRY_ROOT/logs/serversentry.log"
+  echo "test cache" >"$SERVERSENTRY_ROOT/tmp/plugin_test_cache"
+  echo "12345" >"$SERVERSENTRY_ROOT/serversentry.pid"
 
   # Run reset in force mode
   local reset_output
@@ -123,15 +162,15 @@ test_reset_script_force_mode() {
     # Verify files were cleaned up
     local cleanup_success=true
 
-    if [[ -f "$BASE_DIR/serversentry.pid" ]]; then
+    if [[ -f "$SERVERSENTRY_ROOT/serversentry.pid" ]]; then
       cleanup_success=false
     fi
 
-    if [[ -s "$BASE_DIR/logs/serversentry.log" ]]; then
+    if [[ -s "$SERVERSENTRY_ROOT/logs/serversentry.log" ]]; then
       cleanup_success=false
     fi
 
-    if [[ -f "$BASE_DIR/tmp/plugin_test_cache" ]]; then
+    if [[ -f "$SERVERSENTRY_ROOT/tmp/plugin_test_cache" ]]; then
       cleanup_success=false
     fi
 
@@ -154,7 +193,7 @@ test_wrapper_script() {
 
   TESTS_RUN=$((TESTS_RUN + 1))
 
-  local wrapper_script="$BASE_DIR/bin/reset"
+  local wrapper_script="$SERVERSENTRY_ROOT/bin/reset"
 
   if [[ -f "$wrapper_script" ]] && [[ -x "$wrapper_script" ]]; then
     # Test wrapper help

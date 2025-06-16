@@ -1,0 +1,15 @@
+{
+  "analysis": {
+    "timestamp": "2025-05-27 21:50:33 UTC",
+    "scope": "lib",
+    "tool_version": "2.0.0"
+  },
+  "summary": {
+    "total_functions": 0,
+    "total_files":       76,
+    "average_functions_per_file": 0
+  },
+  "categories": {
+
+  }
+}

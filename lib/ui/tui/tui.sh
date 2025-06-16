@@ -4,18 +4,41 @@
 #
 # This provides both advanced and fallback TUI options
 
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+# Initialize with minimal level for TUI
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
+
 # Get the directory of this script
 TUI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Set BASE_DIR if not already set
-if [ -z "$BASE_DIR" ]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-  BASE_DIR="$(dirname "$(dirname "$(dirname "$SCRIPT_DIR")")")"
-fi
-
-# Source core utilities for unified command checking
-if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
-  source "$BASE_DIR/lib/core/utils.sh"
+# Source core utilities for unified command checking using bootstrap
+if [[ -f "$SERVERSENTRY_CORE_DIR/utils.sh" ]]; then
+  serversentry_load_core
 fi
 
 # Try to use advanced TUI first
@@ -39,16 +62,16 @@ else
     TUI_TOOL="none"
   fi
 
-  SERVERSENTRY_BIN="$BASE_DIR/bin/serversentry"
+  SERVERSENTRY_BIN="$SERVERSENTRY_BIN"
 
-  # Source modular TUI components
-  source "$BASE_DIR/lib/ui/tui/utils.sh"
-  source "$BASE_DIR/lib/ui/tui/status.sh"
-  source "$BASE_DIR/lib/ui/tui/logs.sh"
-  source "$BASE_DIR/lib/ui/tui/sysinfo.sh"
-  source "$BASE_DIR/lib/ui/tui/config.sh"
-  source "$BASE_DIR/lib/ui/tui/plugin.sh"
-  source "$BASE_DIR/lib/ui/tui/notification.sh"
+  # Source modular TUI components using bootstrap paths
+  source "$SERVERSENTRY_UI_DIR/tui/utils.sh"
+  source "$SERVERSENTRY_UI_DIR/tui/status.sh"
+  source "$SERVERSENTRY_UI_DIR/tui/logs.sh"
+  source "$SERVERSENTRY_UI_DIR/tui/sysinfo.sh"
+  source "$SERVERSENTRY_UI_DIR/tui/config.sh"
+  source "$SERVERSENTRY_UI_DIR/tui/plugin.sh"
+  source "$SERVERSENTRY_UI_DIR/tui/notification.sh"
 
   # Helper to check serversentry binary exists
   check_serversentry_bin() {

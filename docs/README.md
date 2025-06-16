@@ -24,38 +24,15 @@ Enterprise-grade server monitoring with statistical intelligence and advanced al
 
 **For developers extending and contributing to ServerSentry**
 
-- **[Development Guide](developer/development-guide.md)** - Development setup and contribution guidelines
+- **[Development Guide](developer/development-guide.md)** - Complete guide for developing ServerSentry modules
+- **[Development Standards](developer/development-standards.md)** - Comprehensive development standards and guidelines
+- **[Development Quick Reference](developer/development-quick-reference.md)** - Quick reference and cheat sheet
 - **[API Reference](developer/api-reference.md)** - Complete function registry and API documentation (100+ functions)
 - **[Architecture Overview](developer/architecture.md)** - System design and component relationships
 - **[Plugin Development](developer/plugin-development.md)** - Creating custom monitoring plugins
 - **[Notification Development](developer/notification-development.md)** - Building notification providers
-- **[Testing Guide](developer/testing.md)** - Testing frameworks and best practices
-
-#### **Project Status & Analysis**
-
-- **[Project Status](developer/PROJECT_STATUS.md)** - Comprehensive development completion summary and maintenance plan
-- **[Technical Assessment](developer/TECHNICAL_ASSESSMENT.md)** - Architecture analysis, design patterns, and technical implementation details
-
-### 🔧 **Administrator Documentation**
-
-**For system administrators managing ServerSentry deployments**
-
-- **[Deployment Guide](admin/deployment.md)** - Production deployment strategies
-- **[Security Guide](admin/security.md)** - Security best practices and hardening
-- **[Performance Tuning](admin/performance.md)** - Optimization and monitoring guidelines
-- **[Backup & Recovery](admin/backup.md)** - Data protection and disaster recovery
-- **[Monitoring ServerSentry](admin/monitoring.md)** - Monitoring the monitoring system
-- **[Maintenance Guide](admin/maintenance.md)** - Regular maintenance and updates
-
-### 📋 **API Documentation**
-
-**For integration developers and automation**
-
-- **[REST API](api/rest-api.md)** - RESTful API endpoints and specifications
-- **[Webhook API](api/webhooks.md)** - Webhook integration and payload formats
-- **[Plugin API](api/plugin-api.md)** - Plugin interface specifications
-- **[Notification API](api/notification-api.md)** - Notification provider interface
-- **[JSON Schemas](api/schemas.md)** - Data format specifications
+- **[Compatibility Guide](developer/compatibility.md)** - Cross-platform compatibility information
+- **[Examples](developer/examples/)** - Working examples and templates
 
 ## 🚀 Getting Started
 
@@ -68,15 +45,9 @@ Enterprise-grade server monitoring with statistical intelligence and advanced al
 ### For Developers
 
 1. Read the [Development Guide](developer/development-guide.md)
-2. Review the [API Reference](developer/api-reference.md) for complete function documentation
-3. Check the [Project Status](developer/PROJECT_STATUS.md) for current development state
-4. Review [Technical Assessment](developer/TECHNICAL_ASSESSMENT.md) for architecture and quality analysis
-
-### For Administrators
-
-1. Review [Deployment Guide](admin/deployment.md)
-2. Implement [Security Guide](admin/security.md) recommendations
-3. Set up [Performance Tuning](admin/performance.md)
+2. Review the [Development Standards](developer/development-standards.md) for coding guidelines
+3. Check the [API Reference](developer/api-reference.md) for complete function documentation
+4. Explore the [Examples](developer/examples/) for working templates
 
 ## 📁 Project Overview
 
@@ -112,9 +83,9 @@ Enterprise-grade server monitoring with statistical intelligence and advanced al
 ### Contributing
 
 - Read [Development Guide](developer/development-guide.md)
+- Follow [Development Standards](developer/development-standards.md)
 - Check [API Reference](developer/api-reference.md) for function specifications
-- Review [Project Status](developer/PROJECT_STATUS.md) for current state
-- Follow [Testing Guide](developer/testing.md)
+- Use [Examples](developer/examples/) as templates
 
 ## 📋 Quick Reference
 
@@ -205,6 +176,6 @@ serversentry list-thresholds    # View current thresholds
 
 **📍 Start Here**: New to ServerSentry? Begin with the [Installation Guide](user/installation.md) and [Quick Start Guide](user/quickstart.md).
 
-**🔧 Developers**: Check the [API Reference](developer/api-reference.md) for complete function documentation and [Project Status](developer/PROJECT_STATUS.md) for development completion summary.
+**🔧 Developers**: Check the [API Reference](developer/api-reference.md) for complete function documentation and [Development Standards](developer/development-standards.md) for coding guidelines.
 
 **📊 Status**: ServerSentry v2.0 is production ready and feature complete.

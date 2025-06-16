@@ -6,53 +6,66 @@
 
 set -eo pipefail
 
-# Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(dirname "$SCRIPT_DIR")"
-export BASE_DIR
+# Load ServerSentry environment bootstrap
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  bootstrap_file="$(dirname "${BASH_SOURCE[0]}")/../serversentry-env.sh"
+  if [[ -f "$bootstrap_file" ]]; then
+    # Disable auto-init for installation script
+    export SERVERSENTRY_AUTO_INIT=false
+    # shellcheck source=../serversentry-env.sh
+    source "$bootstrap_file" || {
+      echo "FATAL: Failed to load ServerSentry environment bootstrap" >&2
+      exit 1
+    }
+  else
+    echo "FATAL: ServerSentry environment bootstrap not found: $bootstrap_file" >&2
+    exit 1
+  fi
+
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
+
+fi
+
+# Initialize with minimal level for installation
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
 
 # Skip error handling system initialization in install script to avoid interference
 # The error handling system can be too aggressive during installation
-# if [[ -f "$BASE_DIR/lib/core/error_handling.sh" ]]; then
-#   source "$BASE_DIR/lib/core/error_handling.sh"
+# if [[ -f "$SERVERSENTRY_CORE_DIR/error_handling.sh" ]]; then
+#   source "$SERVERSENTRY_CORE_DIR/error_handling.sh"
 #   if ! error_handling_init; then
 #     echo "Warning: Failed to initialize error handling system - continuing with basic error handling" >&2
 #   fi
 # fi
 
-# Source compatibility utilities
-source "$BASE_DIR/lib/core/utils/compat_utils.sh"
+# Source compatibility utilities using bootstrap
+if [[ -f "$SERVERSENTRY_UTILS_DIR/compat_utils.sh" ]]; then
+  serversentry_load_utility "compat_utils"
+else
+  echo "Warning: Compatibility utilities not found" >&2
+fi
 
 # Initialize compatibility layer
 if ! compat_init; then
   echo "Warning: Failed to initialize compatibility layer - some features may not work correctly" >&2
 fi
 
-# Source command utilities for dependency checking
-if [[ -f "$BASE_DIR/lib/core/utils/command_utils.sh" ]]; then
-  source "$BASE_DIR/lib/core/utils/command_utils.sh"
+# Source command utilities for dependency checking using bootstrap
+if [[ -f "$SERVERSENTRY_UTILS_DIR/command_utils.sh" ]]; then
+  serversentry_load_utility "command_utils"
 fi
 
-# Source standardized color functions
-if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
-  source "$BASE_DIR/lib/ui/cli/colors.sh"
+# Source standardized color functions using bootstrap
+if [[ -f "$SERVERSENTRY_UI_DIR/cli/colors.sh" ]]; then
+  source "$SERVERSENTRY_UI_DIR/cli/colors.sh"
 else
   # Fallback definitions if colors.sh not available
-  print_success() { echo "[SUCCESS] $*"; }
-  print_info() { echo "[INFO] $*"; }
-  print_warning() { echo "[WARNING] $*"; }
-  print_error() {
-    echo "[ERROR] $*"
-    # Log error if error handling is available
-    if declare -f log_error >/dev/null 2>&1; then
-      log_error "install.sh: $*"
-    fi
-  }
-  print_header() { echo "$*"; }
-  print_status() {
-    shift
-    echo "$*"
-  }
 fi
 
 # Enhanced privilege check with error handling
@@ -171,9 +184,9 @@ setup_directories() {
 
   # Create log directory with error handling
   if declare -f safe_execute >/dev/null 2>&1; then
-    safe_execute "compat_mkdir '$BASE_DIR/logs' 755" "Failed to create logs directory"
+    safe_execute "compat_mkdir '$SERVERSENTRY_ROOT/logs' 755" "Failed to create logs directory"
   else
-    compat_mkdir "$BASE_DIR/logs" 755 || {
+    compat_mkdir "$SERVERSENTRY_ROOT/logs" 755 || {
       print_error "Failed to create logs directory"
       exit 1
     }
@@ -182,9 +195,9 @@ setup_directories() {
 
   # Create log archive directory
   if declare -f safe_execute >/dev/null 2>&1; then
-    safe_execute "compat_mkdir '$BASE_DIR/logs/archive' 755" "Failed to create logs archive directory"
+    safe_execute "compat_mkdir '$SERVERSENTRY_ROOT/logs/archive' 755" "Failed to create logs archive directory"
   else
-    compat_mkdir "$BASE_DIR/logs/archive" 755 || {
+    compat_mkdir "$SERVERSENTRY_ROOT/logs/archive" 755 || {
       print_error "Failed to create logs archive directory"
       exit 1
     }
@@ -193,9 +206,9 @@ setup_directories() {
 
   # Create periodic results directory
   if declare -f safe_execute >/dev/null 2>&1; then
-    safe_execute "compat_mkdir '$BASE_DIR/logs/periodic' 755" "Failed to create periodic results directory"
+    safe_execute "compat_mkdir '$SERVERSENTRY_ROOT/logs/periodic' 755" "Failed to create periodic results directory"
   else
-    compat_mkdir "$BASE_DIR/logs/periodic" 755 || {
+    compat_mkdir "$SERVERSENTRY_ROOT/logs/periodic" 755 || {
       print_error "Failed to create periodic results directory"
       exit 1
     }
@@ -204,8 +217,8 @@ setup_directories() {
 
   # Set permissions using compatibility layer with error handling
   local files_to_chmod=(
-    "$BASE_DIR/bin/serversentry"
-    "$BASE_DIR/bin/install.sh"
+    "$SERVERSENTRY_ROOT/bin/serversentry"
+    "$SERVERSENTRY_ROOT/bin/install.sh"
   )
 
   for file in "${files_to_chmod[@]}"; do
@@ -220,17 +233,17 @@ setup_directories() {
 
   # Set directory permissions
   if declare -f safe_execute >/dev/null 2>&1; then
-    safe_execute "chmod -R 755 '$BASE_DIR/lib'" "Failed to set lib directory permissions"
-    safe_execute "chmod -R 644 '$BASE_DIR/logs'" "Failed to set logs file permissions"
-    safe_execute "compat_chmod 755 '$BASE_DIR/logs'" "Failed to set logs directory permissions"
-    safe_execute "compat_chmod 755 '$BASE_DIR/logs/archive'" "Failed to set archive directory permissions"
-    safe_execute "compat_chmod 755 '$BASE_DIR/logs/periodic'" "Failed to set periodic directory permissions"
+    safe_execute "chmod -R 755 '$SERVERSENTRY_ROOT/lib'" "Failed to set lib directory permissions"
+    safe_execute "chmod -R 644 '$SERVERSENTRY_ROOT/logs'" "Failed to set logs file permissions"
+    safe_execute "compat_chmod 755 '$SERVERSENTRY_ROOT/logs'" "Failed to set logs directory permissions"
+    safe_execute "compat_chmod 755 '$SERVERSENTRY_ROOT/logs/archive'" "Failed to set archive directory permissions"
+    safe_execute "compat_chmod 755 '$SERVERSENTRY_ROOT/logs/periodic'" "Failed to set periodic directory permissions"
   else
-    chmod -R 755 "$BASE_DIR/lib" || print_warning "Failed to set lib directory permissions"
-    chmod -R 644 "$BASE_DIR/logs" || print_warning "Failed to set logs file permissions"
-    compat_chmod 755 "$BASE_DIR/logs" || print_warning "Failed to set logs directory permissions"
-    compat_chmod 755 "$BASE_DIR/logs/archive" || print_warning "Failed to set archive directory permissions"
-    compat_chmod 755 "$BASE_DIR/logs/periodic" || print_warning "Failed to set periodic directory permissions"
+    chmod -R 755 "$SERVERSENTRY_ROOT/lib" || print_warning "Failed to set lib directory permissions"
+    chmod -R 644 "$SERVERSENTRY_ROOT/logs" || print_warning "Failed to set logs file permissions"
+    compat_chmod 755 "$SERVERSENTRY_ROOT/logs" || print_warning "Failed to set logs directory permissions"
+    compat_chmod 755 "$SERVERSENTRY_ROOT/logs/archive" || print_warning "Failed to set archive directory permissions"
+    compat_chmod 755 "$SERVERSENTRY_ROOT/logs/periodic" || print_warning "Failed to set periodic directory permissions"
   fi
 
   print_success "Directories and permissions set up"
@@ -241,26 +254,26 @@ setup_configuration() {
   print_info "Setting up configuration..."
 
   # Create main config directory if it doesn't exist
-  if [ ! -d "$BASE_DIR/config" ]; then
-    mkdir -p "$BASE_DIR/config"
+  if [ ! -d "$SERVERSENTRY_ROOT/config" ]; then
+    mkdir -p "$SERVERSENTRY_ROOT/config"
     print_success "Created config directory"
   fi
 
   # Create plugin config directory if it doesn't exist
-  if [ ! -d "$BASE_DIR/config/plugins" ]; then
-    mkdir -p "$BASE_DIR/config/plugins"
+  if [ ! -d "$SERVERSENTRY_ROOT/config/plugins" ]; then
+    mkdir -p "$SERVERSENTRY_ROOT/config/plugins"
     print_success "Created plugin config directory"
   fi
 
   # Create notification config directory if it doesn't exist
-  if [ ! -d "$BASE_DIR/config/notifications" ]; then
-    mkdir -p "$BASE_DIR/config/notifications"
+  if [ ! -d "$SERVERSENTRY_ROOT/config/notifications" ]; then
+    mkdir -p "$SERVERSENTRY_ROOT/config/notifications"
     print_success "Created notification config directory"
   fi
 
   # Create main YAML config file if it doesn't exist
-  if [ ! -f "$BASE_DIR/config/serversentry.yaml" ]; then
-    cat >"$BASE_DIR/config/serversentry.yaml" <<EOF
+  if [ ! -f "$SERVERSENTRY_ROOT/config/serversentry.yaml" ]; then
+    cat >"$SERVERSENTRY_ROOT/config/serversentry.yaml" <<EOF
 # ServerSentry v2 Configuration
 # Main configuration file for the ServerSentry monitoring system
 
@@ -339,24 +352,24 @@ EOF
   local plugins=("cpu" "memory" "disk" "process")
 
   for plugin in "${plugins[@]}"; do
-    if [ ! -f "$BASE_DIR/config/plugins/${plugin}.conf" ]; then
+    if [ ! -f "$SERVERSENTRY_ROOT/config/plugins/${plugin}.conf" ]; then
       case "$plugin" in
       cpu)
-        cat >"$BASE_DIR/config/plugins/${plugin}.conf" <<EOF
+        cat >"$SERVERSENTRY_ROOT/config/plugins/${plugin}.conf" <<EOF
 # CPU Plugin Configuration
 cpu_threshold=80
 cpu_warning_threshold=70
 EOF
         ;;
       memory)
-        cat >"$BASE_DIR/config/plugins/${plugin}.conf" <<EOF
+        cat >"$SERVERSENTRY_ROOT/config/plugins/${plugin}.conf" <<EOF
 # Memory Plugin Configuration
 memory_threshold=80
 memory_warning_threshold=70
 EOF
         ;;
       disk)
-        cat >"$BASE_DIR/config/plugins/${plugin}.conf" <<EOF
+        cat >"$SERVERSENTRY_ROOT/config/plugins/${plugin}.conf" <<EOF
 # Disk Plugin Configuration
 disk_threshold=85
 disk_warning_threshold=75
@@ -364,7 +377,7 @@ disk_monitored_paths=/
 EOF
         ;;
       process)
-        cat >"$BASE_DIR/config/plugins/${plugin}.conf" <<EOF
+        cat >"$SERVERSENTRY_ROOT/config/plugins/${plugin}.conf" <<EOF
 # Process Plugin Configuration
 process_names=
 process_check_interval=60
@@ -396,11 +409,11 @@ setup_cron() {
     # Add our cron job
     # shellcheck disable=SC2129
     echo "# ServerSentry periodic check (every 5 minutes)" >>"$temp_crontab"
-    echo "*/5 * * * * $BASE_DIR/bin/serversentry check >/dev/null 2>&1" >>"$temp_crontab"
+    echo "*/5 * * * * $SERVERSENTRY_ROOT/bin/serversentry check >/dev/null 2>&1" >>"$temp_crontab"
 
     # Add periodic system report job (daily at midnight)
     echo "# ServerSentry daily system report" >>"$temp_crontab"
-    echo "0 0 * * * $BASE_DIR/bin/serversentry status > $BASE_DIR/logs/daily_report.log 2>&1" >>"$temp_crontab"
+    echo "0 0 * * * $SERVERSENTRY_ROOT/bin/serversentry status > $SERVERSENTRY_ROOT/logs/daily_report.log 2>&1" >>"$temp_crontab"
 
     # Install the new crontab
     crontab "$temp_crontab"
@@ -434,12 +447,12 @@ create_symlink() {
 
   # Check if we have permission to create the symlink
   if [[ -w "$bin_dir" ]]; then
-    ln -sf "$BASE_DIR/bin/serversentry" "$bin_dir/serversentry"
+    ln -sf "$SERVERSENTRY_ROOT/bin/serversentry" "$bin_dir/serversentry"
     print_success "Created symbolic link at $bin_dir/serversentry"
   else
     print_warning "Cannot create symbolic link. Permission denied."
     print_info "To create the symlink manually, run:"
-    print_info "sudo ln -sf \"$BASE_DIR/bin/serversentry\" \"$bin_dir/serversentry\""
+    print_info "sudo ln -sf \"$SERVERSENTRY_ROOT/bin/serversentry\" \"$bin_dir/serversentry\""
   fi
 }
 
@@ -466,7 +479,7 @@ configure_webhooks() {
       read -r -p "Enter Teams webhook URL: " teams_webhook_url
 
       # Create the Teams configuration file
-      cat >"$BASE_DIR/config/notifications/teams.conf" <<EOF
+      cat >"$SERVERSENTRY_ROOT/config/notifications/teams.conf" <<EOF
 # Teams Notification Provider Configuration
 teams_webhook_url="$teams_webhook_url"
 teams_notification_title="ServerSentry Alert"
@@ -489,7 +502,7 @@ EOF
       read -r -p "Enter Slack webhook URL: " slack_webhook_url
 
       # Create the Slack configuration file
-      cat >"$BASE_DIR/config/notifications/slack.conf" <<EOF
+      cat >"$SERVERSENTRY_ROOT/config/notifications/slack.conf" <<EOF
 # Slack Notification Provider Configuration
 slack_webhook_url="$slack_webhook_url"
 slack_notification_title="ServerSentry Alert"
@@ -514,7 +527,7 @@ EOF
       read -r -p "Enter Discord webhook URL: " discord_webhook_url
 
       # Create the Discord configuration file
-      cat >"$BASE_DIR/config/notifications/discord.conf" <<EOF
+      cat >"$SERVERSENTRY_ROOT/config/notifications/discord.conf" <<EOF
 # Discord Notification Provider Configuration
 discord_webhook_url="$discord_webhook_url"
 discord_notification_title="ServerSentry Alert"
@@ -585,7 +598,7 @@ email_smtp_use_tls=\"$use_tls\""
       esac
 
       # Update the Email configuration file
-      cat >"$BASE_DIR/config/notifications/email.conf" <<EOF
+      cat >"$SERVERSENTRY_ROOT/config/notifications/email.conf" <<EOF
 # Email Notification Provider Configuration
 email_recipients="$email_recipients"
 email_sender="$email_sender"
@@ -620,7 +633,7 @@ EOF
 
   # Update main config with notification channels
   if [ -n "$notification_channels" ]; then
-    compat_sed_inplace "s/notification_channels=.*/notification_channels=$notification_channels/" "$BASE_DIR/config/serversentry.yaml"
+    compat_sed_inplace "s/notification_channels=.*/notification_channels=$notification_channels/" "$SERVERSENTRY_ROOT/config/serversentry.yaml"
     print_success "Updated notification channels in main configuration"
   fi
 }
@@ -636,7 +649,7 @@ configure_process_monitoring() {
     read -r -p "Enter process names to monitor (comma-separated): " process_names
 
     # Update the process plugin configuration
-    compat_sed_inplace "s/process_names=.*/process_names=$process_names/" "$BASE_DIR/config/plugins/process.conf"
+    compat_sed_inplace "s/process_names=.*/process_names=$process_names/" "$SERVERSENTRY_ROOT/config/plugins/process.conf"
     print_success "Process monitoring configured"
   else
     print_info "Skipping process monitoring configuration"
@@ -660,10 +673,10 @@ show_usage() {
   echo "  serversentry version     - Show version information"
   echo "  serversentry help        - Show help message"
   echo ""
-  echo "Configuration files are located in: $BASE_DIR/config/"
-  echo "Log files are located in: $BASE_DIR/logs/"
+  echo "Configuration files are located in: $SERVERSENTRY_ROOT/config/"
+  echo "Log files are located in: $SERVERSENTRY_ROOT/logs/"
   echo ""
-  echo "For more information, see the documentation in: $BASE_DIR/docs/"
+  echo "For more information, see the documentation in: $SERVERSENTRY_ROOT/docs/"
 }
 
 # Main installation function
@@ -772,7 +785,7 @@ main() {
   print_info "Testing the installation..."
   # Disable error handling for the test to avoid interference
   set +e
-  BASE_DIR="$BASE_DIR" "$BASE_DIR/bin/serversentry" version
+  BASE_DIR="$SERVERSENTRY_ROOT" "$SERVERSENTRY_ROOT/bin/serversentry" version
   local test_result=$?
   set -e
 

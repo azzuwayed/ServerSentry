@@ -90,7 +90,8 @@
     ".replit": true,
     "generated-icon.png": true,
     "**/*.backup": false,
-    "**/tmp": false
+    "**/tmp": false,
+    "LICENSE": true
   },
   "files.watcherExclude": {
     "**/logs/**": true,

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
 #
 # ServerSentry v2 - CLI Colors and UI Utilities
 #
@@ -8,18 +13,6 @@
 # Source core utilities for command checking
 if [[ -f "$BASE_DIR/lib/core/utils.sh" ]]; then
   source "$BASE_DIR/lib/core/utils.sh"
-fi
-
-# Source command utilities directly to ensure util_command_exists is available
-if [[ -f "$BASE_DIR/lib/core/utils/command_utils.sh" ]]; then
-  source "$BASE_DIR/lib/core/utils/command_utils.sh"
-fi
-
-# Fallback command existence check if util_command_exists is not available
-if ! declare -f util_command_exists >/dev/null 2>&1; then
-  util_command_exists() {
-    command -v "$1" >/dev/null 2>&1
-  }
 fi
 
 # Color detection
@@ -46,22 +39,50 @@ init_colors() {
   if [[ "$COLOR_SUPPORT" == "true" ]]; then
     # Text formatting
     RESET="$(tput sgr0 2>/dev/null)"
-    BOLD="$(tput bold 2>/dev/null)"
-    DIM="$(tput dim 2>/dev/null)"
-    UNDERLINE="$(tput smul 2>/dev/null)"
-    ITALIC="$(tput sitm 2>/dev/null)"
-    BLINK="$(tput blink 2>/dev/null)"
-    REVERSE="$(tput rev 2>/dev/null)"
+    if [[ -z "${BOLD:-}" ]]; then
+      BOLD="$(tput bold 2>/dev/null)"
+    fi
+    if [[ -z "${DIM:-}" ]]; then
+      DIM="$(tput dim 2>/dev/null)"
+    fi
+    if [[ -z "${UNDERLINE:-}" ]]; then
+      UNDERLINE="$(tput smul 2>/dev/null)"
+    fi
+    if [[ -z "${ITALIC:-}" ]]; then
+      ITALIC="$(tput sitm 2>/dev/null)"
+    fi
+    if [[ -z "${BLINK:-}" ]]; then
+      BLINK="$(tput blink 2>/dev/null)"
+    fi
+    if [[ -z "${REVERSE:-}" ]]; then
+      REVERSE="$(tput rev 2>/dev/null)"
+    fi
 
-    # Standard colors
-    BLACK="$(tput setaf 0 2>/dev/null)"
-    RED="$(tput setaf 1 2>/dev/null)"
-    GREEN="$(tput setaf 2 2>/dev/null)"
-    YELLOW="$(tput setaf 3 2>/dev/null)"
-    BLUE="$(tput setaf 4 2>/dev/null)"
-    MAGENTA="$(tput setaf 5 2>/dev/null)"
-    CYAN="$(tput setaf 6 2>/dev/null)"
-    WHITE="$(tput setaf 7 2>/dev/null)"
+    # Standard colors (only set if not already defined)
+    if [[ -z "${BLACK:-}" ]]; then
+      BLACK="$(tput setaf 0 2>/dev/null)"
+    fi
+    if [[ -z "${RED:-}" ]]; then
+      RED="$(tput setaf 1 2>/dev/null)"
+    fi
+    if [[ -z "${GREEN:-}" ]]; then
+      GREEN="$(tput setaf 2 2>/dev/null)"
+    fi
+    if [[ -z "${YELLOW:-}" ]]; then
+      YELLOW="$(tput setaf 3 2>/dev/null)"
+    fi
+    if [[ -z "${BLUE:-}" ]]; then
+      BLUE="$(tput setaf 4 2>/dev/null)"
+    fi
+    if [[ -z "${MAGENTA:-}" ]]; then
+      MAGENTA="$(tput setaf 5 2>/dev/null)"
+    fi
+    if [[ -z "${CYAN:-}" ]]; then
+      CYAN="$(tput setaf 6 2>/dev/null)"
+    fi
+    if [[ -z "${WHITE:-}" ]]; then
+      WHITE="$(tput setaf 7 2>/dev/null)"
+    fi
 
     # Bright colors (if supported)
     BRIGHT_BLACK="$(tput setaf 8 2>/dev/null)"
@@ -83,9 +104,22 @@ init_colors() {
     BG_CYAN="$(tput setab 6 2>/dev/null)"
     BG_WHITE="$(tput setab 7 2>/dev/null)"
   else
-    # No color support - set all to empty
-    RESET="" BOLD="" DIM="" UNDERLINE="" ITALIC="" BLINK="" REVERSE=""
-    BLACK="" RED="" GREEN="" YELLOW="" BLUE="" MAGENTA="" CYAN="" WHITE=""
+    # No color support - set all to empty (only if not already defined)
+    if [[ -z "${RESET:-}" ]]; then RESET=""; fi
+    if [[ -z "${BOLD:-}" ]]; then BOLD=""; fi
+    if [[ -z "${DIM:-}" ]]; then DIM=""; fi
+    if [[ -z "${UNDERLINE:-}" ]]; then UNDERLINE=""; fi
+    if [[ -z "${ITALIC:-}" ]]; then ITALIC=""; fi
+    if [[ -z "${BLINK:-}" ]]; then BLINK=""; fi
+    if [[ -z "${REVERSE:-}" ]]; then REVERSE=""; fi
+    if [[ -z "${BLACK:-}" ]]; then BLACK=""; fi
+    if [[ -z "${RED:-}" ]]; then RED=""; fi
+    if [[ -z "${GREEN:-}" ]]; then GREEN=""; fi
+    if [[ -z "${YELLOW:-}" ]]; then YELLOW=""; fi
+    if [[ -z "${BLUE:-}" ]]; then BLUE=""; fi
+    if [[ -z "${MAGENTA:-}" ]]; then MAGENTA=""; fi
+    if [[ -z "${CYAN:-}" ]]; then CYAN=""; fi
+    if [[ -z "${WHITE:-}" ]]; then WHITE=""; fi
     BRIGHT_BLACK="" BRIGHT_RED="" BRIGHT_GREEN="" BRIGHT_YELLOW=""
     BRIGHT_BLUE="" BRIGHT_MAGENTA="" BRIGHT_CYAN="" BRIGHT_WHITE=""
     BG_BLACK="" BG_RED="" BG_GREEN="" BG_YELLOW=""
@@ -137,21 +171,6 @@ init_colors() {
 }
 
 # Print functions with color support
-print_success() {
-  echo "${SUCCESS_COLOR}${BOLD}$*${RESET}"
-}
-
-print_warning() {
-  echo "${WARNING_COLOR}${BOLD}$*${RESET}"
-}
-
-print_error() {
-  echo "${ERROR_COLOR}${BOLD}$*${RESET}"
-}
-
-print_info() {
-  echo "${INFO_COLOR}$*${RESET}"
-}
 
 print_debug() {
   echo "${DEBUG_COLOR}$*${RESET}"
@@ -162,75 +181,10 @@ print_critical() {
 }
 
 # Status printing functions
-print_status() {
-  local status="$1"
-  shift
-  local message="$*"
-
-  case "$status" in
-  "ok" | "success")
-    echo "${SUCCESS_COLOR}${SYMBOL_OK}${RESET} $message"
-    ;;
-  "warning" | "warn")
-    echo "${WARNING_COLOR}${SYMBOL_WARNING}${RESET} $message"
-    ;;
-  "error" | "err")
-    echo "${ERROR_COLOR}${SYMBOL_ERROR}${RESET} $message"
-    ;;
-  "info")
-    echo "${INFO_COLOR}${SYMBOL_INFO}${RESET} $message"
-    ;;
-  "debug")
-    echo "${DEBUG_COLOR}${SYMBOL_DEBUG}${RESET} $message"
-    ;;
-  "critical" | "crit")
-    echo "${CRITICAL_COLOR}${SYMBOL_CRITICAL}${RESET} $message"
-    ;;
-  "running")
-    echo "${SUCCESS_COLOR}${SYMBOL_RUNNING}${RESET} $message"
-    ;;
-  "stopped")
-    echo "${ERROR_COLOR}${SYMBOL_STOPPED}${RESET} $message"
-    ;;
-  *)
-    echo "${BLUE}${SYMBOL_UNKNOWN}${RESET} $message"
-    ;;
-  esac
-}
 
 # Header printing function
-print_header() {
-  local text="$1"
-  local width="${2:-60}"
-
-  if [[ "$COLOR_SUPPORT" == "true" ]]; then
-    local separator
-    separator=$(printf "%*s" "$width" | tr ' ' '=')
-    echo "${BOLD}${BLUE}$separator${RESET}"
-    echo "${BOLD}${BLUE}$text${RESET}"
-    echo "${BOLD}${BLUE}$separator${RESET}"
-  else
-    local separator
-    separator=$(printf "%*s" "$width" | tr ' ' '=')
-    echo "$separator"
-    echo "$text"
-    echo "$separator"
-  fi
-}
 
 # Separator function
-print_separator() {
-  local width="${1:-60}"
-  local char="${2:--}"
-
-  local separator
-  separator=$(printf "%*s" "$width" | tr " " "$char")
-  if [[ "$COLOR_SUPPORT" == "true" ]]; then
-    echo "${DIM}$separator${RESET}"
-  else
-    echo "$separator"
-  fi
-}
 
 # Progress bar function
 create_progress_bar() {

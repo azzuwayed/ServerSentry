@@ -117,8 +117,27 @@ get_cpu_usage() {
     # Fallback to top command
     case "$(uname -s)" in
     Darwin*)
-      # macOS top format
+      # macOS top format - try multiple parsing methods
+      # Method 1: Parse "CPU usage" line
       cpu_usage=$(top -l 2 -n 0 | grep "CPU usage" | tail -1 | awk '{print $3}' | tr -d '%' 2>/dev/null)
+
+      # Method 2: If that fails, try parsing the user/sys/idle line
+      if [[ -z "$cpu_usage" || "$cpu_usage" == "0.0" ]]; then
+        # Parse format like "CPU usage: 12.34% user, 5.67% sys, 81.99% idle"
+        local cpu_line
+        cpu_line=$(top -l 2 -n 0 | grep "CPU usage" | tail -1)
+        if [[ "$cpu_line" =~ ([0-9]+\.[0-9]+)%[[:space:]]+user.*([0-9]+\.[0-9]+)%[[:space:]]+sys ]]; then
+          local user_cpu="${BASH_REMATCH[1]}"
+          local sys_cpu="${BASH_REMATCH[2]}"
+          cpu_usage=$(echo "$user_cpu + $sys_cpu" | bc -l 2>/dev/null | awk '{printf "%.1f", $1}')
+        fi
+      fi
+
+      # Method 3: If still no result, use iostat as fallback
+      if [[ -z "$cpu_usage" || "$cpu_usage" == "0.0" ]] && command -v iostat >/dev/null 2>&1; then
+        # Use iostat with timeout to avoid hanging
+        cpu_usage=$(timeout 5 iostat -c 2 | tail -1 | awk '{print 100-$6}' 2>/dev/null)
+      fi
       ;;
     Linux*)
       # Linux top format
@@ -150,8 +169,8 @@ get_cpu_usage() {
     fi
   fi
 
-  # Validate result
-  if [[ -z "$cpu_usage" || "$cpu_usage" == "0" ]]; then
+  # Validate result - allow 0.0 as a valid result, but not empty
+  if [[ -z "$cpu_usage" ]]; then
     return 1
   fi
 

@@ -8,25 +8,60 @@ set -e
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
+
+
+# Load unified test framework
+if [[ -f "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh"
+fi
+
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
 
 # Source standardized color functions
-if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
-  source "$BASE_DIR/lib/ui/cli/colors.sh"
+if [[ -f "$SERVERSENTRY_ROOT/lib/ui/cli/colors.sh" ]]; then
+  source "$SERVERSENTRY_ROOT/lib/ui/cli/colors.sh"
 else
   # Fallback definitions if colors.sh not available
-  print_success() { echo "PASS: $*"; }
-  print_error() { echo "FAIL: $*"; }
-  print_warning() { echo "WARN: $*"; }
-  print_info() { echo "INFO: $*"; }
 fi
 
 # Source the modules we're testing
-source "$BASE_DIR/lib/core/utils.sh"
-source "$BASE_DIR/lib/core/utils/command_utils.sh"
-source "$BASE_DIR/lib/core/utils/array_utils.sh"
-source "$BASE_DIR/lib/core/utils/validation_utils.sh"
-source "$BASE_DIR/lib/core/utils/json_utils.sh"
+source "$SERVERSENTRY_ROOT/lib/core/utils.sh"
+source "$SERVERSENTRY_ROOT/lib/core/utils/command_utils.sh"
+source "$SERVERSENTRY_ROOT/lib/core/utils/array_utils.sh"
+source "$SERVERSENTRY_ROOT/lib/core/utils/validation_utils.sh"
+source "$SERVERSENTRY_ROOT/lib/core/utils/json_utils.sh"
 
 # Test counter
 TESTS_RUN=0
@@ -34,39 +69,6 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Test assertion function
-assert() {
-  local test_name="$1"
-  local condition="$2"
-  local message="${3:-}"
-
-  TESTS_RUN=$((TESTS_RUN + 1))
-
-  echo -n "Testing $test_name... "
-
-  if eval "$condition"; then
-    if [[ "$COLOR_SUPPORT" == "true" ]]; then
-      echo -e "${SUCCESS_COLOR}PASS${RESET}"
-    else
-      echo "PASS"
-    fi
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-    return 0
-  else
-    if [[ "$COLOR_SUPPORT" == "true" ]]; then
-      echo -e "${ERROR_COLOR}FAIL${RESET}"
-      if [ -n "$message" ]; then
-        echo -e "${WARNING_COLOR}$message${RESET}"
-      fi
-    else
-      echo "FAIL"
-      if [ -n "$message" ]; then
-        echo "$message"
-      fi
-    fi
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-    return 1
-  fi
-}
 
 echo "Running utility function tests..."
 

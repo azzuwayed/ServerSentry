@@ -8,17 +8,56 @@ set -e
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
+
+
+# Load unified test framework
+if [[ -f "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh"
+fi
+
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
 
 # Source test framework and helpers
 source "$SCRIPT_DIR/../test_framework.sh"
 source "$SCRIPT_DIR/../helpers/test_helpers.sh"
 
 # Source required modules
-source "$BASE_DIR/lib/core/logging.sh"
-source "$BASE_DIR/lib/core/utils/config_utils.sh"
-source "$BASE_DIR/lib/plugins/cpu/cpu.sh"
-source "$BASE_DIR/lib/plugins/memory/memory.sh"
+source "$SERVERSENTRY_ROOT/lib/core/logging.sh"
+source "$SERVERSENTRY_ROOT/lib/core/utils/config_utils.sh"
+source "$SERVERSENTRY_ROOT/lib/plugins/cpu/cpu.sh"
+source "$SERVERSENTRY_ROOT/lib/plugins/memory/memory.sh"
 
 # Test configuration
 TEST_SUITE_NAME="Performance Benchmark Tests"
@@ -48,29 +87,6 @@ cleanup_performance_tests() {
 }
 
 # Performance test assertion
-assert_performance() {
-  local test_name="$1"
-  local actual_time="$2"
-  local threshold="$3"
-  local message="${4:-}"
-
-  TESTS_RUN=$((TESTS_RUN + 1))
-
-  print_test_header "$test_name"
-
-  if (($(awk "BEGIN {print ($actual_time <= $threshold)}"))); then
-    print_success "Performance test passed: ${actual_time}s <= ${threshold}s"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-    return 0
-  else
-    print_error "Performance test failed: ${actual_time}s > ${threshold}s"
-    if [[ -n "$message" ]]; then
-      print_warning "$message"
-    fi
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-    return 1
-  fi
-}
 
 # Test 1: Configuration parsing performance
 test_config_parsing_performance() {

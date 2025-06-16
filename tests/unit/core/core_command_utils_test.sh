@@ -6,14 +6,47 @@
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+
+# Load unified test framework
+if [[ -f "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh"
+fi
+
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
 
 # Source the test framework
 source "$SCRIPT_DIR/../test_framework.sh"
 
 # Source required modules
-source "${BASE_DIR}/lib/core/utils/command_utils.sh"
-source "${BASE_DIR}/lib/core/logging.sh"
+source "${SERVERSENTRY_ROOT}/lib/core/utils/command_utils.sh"
+source "${SERVERSENTRY_ROOT}/lib/core/logging.sh"
 
 # Test configuration
 TEST_SUITE_NAME="Command Utilities Tests"
@@ -23,19 +56,7 @@ TESTS_FAILED=0
 
 # === HELPER FUNCTIONS FOR TESTING ===
 
-test_pass() {
-  local message="$1"
-  print_success "$message"
-  ((TESTS_PASSED++))
-  ((TESTS_RUN++))
-}
 
-test_fail() {
-  local message="$1"
-  print_error "$message"
-  ((TESTS_FAILED++))
-  ((TESTS_RUN++))
-}
 
 # Setup function
 setup_command_utils_tests() {
@@ -47,26 +68,26 @@ setup_command_utils_tests() {
 
   # Create test script files
   cat >"$TEST_TEMP_DIR/test_commands/success_command.sh" <<'EOF'
-#!/bin/bash
+#!/usr/bin/env bash
 echo "Success output"
 exit 0
 EOF
 
   cat >"$TEST_TEMP_DIR/test_commands/failure_command.sh" <<'EOF'
-#!/bin/bash
+#!/usr/bin/env bash
 echo "Error output" >&2
 exit 1
 EOF
 
   cat >"$TEST_TEMP_DIR/test_commands/slow_command.sh" <<'EOF'
-#!/bin/bash
+#!/usr/bin/env bash
 sleep 2
 echo "Slow output"
 exit 0
 EOF
 
   cat >"$TEST_TEMP_DIR/test_commands/timeout_command.sh" <<'EOF'
-#!/bin/bash
+#!/usr/bin/env bash
 sleep 10
 echo "This should timeout"
 exit 0

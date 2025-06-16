@@ -9,17 +9,52 @@ set -e
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/../.." &>/dev/null && pwd)"
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
+
+
+# Load unified test framework
+if [[ -f "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/tests/lib/test_framework_core.sh"
+fi
+
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
 
 # Source standardized color functions
-if [[ -f "$BASE_DIR/lib/ui/cli/colors.sh" ]]; then
-  source "$BASE_DIR/lib/ui/cli/colors.sh"
+if [[ -f "$SERVERSENTRY_ROOT/lib/ui/cli/colors.sh" ]]; then
+  source "$SERVERSENTRY_ROOT/lib/ui/cli/colors.sh"
 else
   # Fallback definitions if colors.sh not available
-  print_success() { echo "PASS: $*"; }
-  print_error() { echo "FAIL: $*"; }
-  print_warning() { echo "WARN: $*"; }
-  print_info() { echo "INFO: $*"; }
 fi
 
 # Test counters
@@ -82,30 +117,8 @@ run_test() {
 }
 
 # Setup test environment
-setup_test_environment() {
-  echo "Setting up comprehensive integration test environment..."
-  mkdir -p "$BASE_DIR/logs"
-
-  # Clean up any numbered files that might exist (security test)
-  rm -f "$BASE_DIR"/[0-9][0-9] 2>/dev/null || true
-
-  # Ensure we're in the base directory
-  cd "$BASE_DIR"
-
-  print_success "Test environment ready"
-}
 
 # Cleanup test environment
-cleanup_test_environment() {
-  # Clean up numbered files (security)
-  rm -f "$BASE_DIR"/[0-9][0-9] 2>/dev/null || true
-
-  # Remove test artifacts
-  rm -f /tmp/serversentry_test_output 2>/dev/null || true
-  rm -f /tmp/serversentry_security_test_* 2>/dev/null || true
-
-  echo "Test environment cleaned up"
-}
 
 echo "Starting ServerSentry Comprehensive Integration Tests..."
 
@@ -120,37 +133,37 @@ echo ""
 print_info "Running Basic Functionality Tests..."
 
 # Test 1: Check if the main script exists and is executable
-run_test "Main script exists and executable" "[ -x \"$BASE_DIR/bin/serversentry\" ]" 0 "basic"
+run_test "Main script exists and executable" "[ -x \"$SERVERSENTRY_ROOT/bin/serversentry\" ]" 0 "basic"
 
 # Test 2: Run version command
-run_test "Version command" "\"$BASE_DIR/bin/serversentry\" version" 0 "basic"
+run_test "Version command" "\"$SERVERSENTRY_ROOT/bin/serversentry\" version" 0 "basic"
 
 # Test 3: Check help command
-run_test "Help command" "\"$BASE_DIR/bin/serversentry\" help" 0 "basic"
+run_test "Help command" "\"$SERVERSENTRY_ROOT/bin/serversentry\" help" 0 "basic"
 
 # Test 4: Run CPU check
-run_test "CPU check" "\"$BASE_DIR/bin/serversentry\" check cpu" 0 "basic"
+run_test "CPU check" "\"$SERVERSENTRY_ROOT/bin/serversentry\" check cpu" 0 "basic"
 
 # Test 5: Run memory check
-run_test "Memory check" "\"$BASE_DIR/bin/serversentry\" check memory" 0 "basic"
+run_test "Memory check" "\"$SERVERSENTRY_ROOT/bin/serversentry\" check memory" 0 "basic"
 
 # Test 6: Run disk check
-run_test "Disk check" "\"$BASE_DIR/bin/serversentry\" check disk" 0 "basic"
+run_test "Disk check" "\"$SERVERSENTRY_ROOT/bin/serversentry\" check disk" 0 "basic"
 
 # Test 7: Run process check
-run_test "Process check" "\"$BASE_DIR/bin/serversentry\" check process" 0 "basic"
+run_test "Process check" "\"$SERVERSENTRY_ROOT/bin/serversentry\" check process" 0 "basic"
 
 # Test 8: Run status command
-run_test "Status command" "\"$BASE_DIR/bin/serversentry\" status" 0 "basic"
+run_test "Status command" "\"$SERVERSENTRY_ROOT/bin/serversentry\" status" 0 "basic"
 
 # Test 9: Run list command
-run_test "List command" "\"$BASE_DIR/bin/serversentry\" list" 0 "basic"
+run_test "List command" "\"$SERVERSENTRY_ROOT/bin/serversentry\" list" 0 "basic"
 
 # Test 10: Check logs command
-run_test "Logs command" "\"$BASE_DIR/bin/serversentry\" logs view" 0 "basic"
+run_test "Logs command" "\"$SERVERSENTRY_ROOT/bin/serversentry\" logs view" 0 "basic"
 
 # Test 11: Test JSON output
-run_test "JSON status output" "\"$BASE_DIR/bin/serversentry\" status --json" 0 "basic"
+run_test "JSON status output" "\"$SERVERSENTRY_ROOT/bin/serversentry\" status --json" 0 "basic"
 
 # =============================================================================
 # SECURITY TESTS
@@ -161,7 +174,7 @@ print_info "Running Security Tests..."
 
 # Test 12: Composite check security (no file creation)
 run_test "Composite check security" "
-  cd \"$BASE_DIR\" &&
+  cd \"$SERVERSENTRY_ROOT\" &&
   bin/serversentry composite test >/dev/null 2>&1 || true;
   files_found=0;
   for num in 50 60 80 85 90 95; do
@@ -175,7 +188,7 @@ run_test "Composite check security" "
 
 # Test 13: Memory plugin security
 run_test "Memory check security" "
-  cd \"$BASE_DIR\" &&
+  cd \"$SERVERSENTRY_ROOT\" &&
   bin/serversentry check memory >/dev/null 2>&1 || true;
   files_found=0;
   for num in 50 60 80 85 90 95; do
@@ -189,7 +202,7 @@ run_test "Memory check security" "
 
 # Test 14: Arithmetic expression security
 run_test "Arithmetic expressions security" "
-  cd \"$BASE_DIR\";
+  cd \"$SERVERSENTRY_ROOT\";
   if command -v bc >/dev/null 2>&1; then
     echo '15.0 > 80' | bc >/dev/null 2>&1 || true;
     echo '95.5 > 90' | bc >/dev/null 2>&1 || true;
@@ -206,7 +219,7 @@ run_test "Arithmetic expressions security" "
 
 # Test 15: CLI commands security
 run_test "CLI commands security" "
-  cd \"$BASE_DIR\";
+  cd \"$SERVERSENTRY_ROOT\";
   for cmd in 'version' 'help' 'status' 'list'; do
     timeout 5s bin/serversentry \"\$cmd\" >/dev/null 2>&1 || true;
   done;
@@ -240,12 +253,12 @@ echo ""
 print_info "Running Advanced Integration Tests..."
 
 # Test 17: Start monitoring service
-run_test "Start monitoring service" "\"$BASE_DIR/bin/serversentry\" start" 0 "basic"
+run_test "Start monitoring service" "\"$SERVERSENTRY_ROOT/bin/serversentry\" start" 0 "basic"
 
 # Test 18: Check if monitoring is running
 run_test "Monitoring service running" "
-  if [[ -f \"$BASE_DIR/serversentry.pid\" ]]; then
-    pid=\$(cat \"$BASE_DIR/serversentry.pid\");
+  if [[ -f \"$SERVERSENTRY_ROOT/serversentry.pid\" ]]; then
+    pid=\$(cat \"$SERVERSENTRY_ROOT/serversentry.pid\");
     ps -p \"\$pid\" >/dev/null 2>&1;
   else
     false;
@@ -253,12 +266,12 @@ run_test "Monitoring service running" "
 " 0 "basic"
 
 # Test 19: Stop monitoring service
-run_test "Stop monitoring service" "\"$BASE_DIR/bin/serversentry\" stop" 0 "basic"
+run_test "Stop monitoring service" "\"$SERVERSENTRY_ROOT/bin/serversentry\" stop" 0 "basic"
 
 # Test 20: Verify service stopped
 run_test "Monitoring service stopped" "
-  if [[ -f \"$BASE_DIR/serversentry.pid\" ]]; then
-    pid=\$(cat \"$BASE_DIR/serversentry.pid\");
+  if [[ -f \"$SERVERSENTRY_ROOT/serversentry.pid\" ]]; then
+    pid=\$(cat \"$SERVERSENTRY_ROOT/serversentry.pid\");
     ! ps -p \"\$pid\" >/dev/null 2>&1;
   else
     true;
@@ -267,9 +280,9 @@ run_test "Monitoring service stopped" "
 
 # Test 21: Configuration validation
 run_test "Configuration validation" "
-  if [[ -f \"$BASE_DIR/config/serversentry.yaml\" ]]; then
+  if [[ -f \"$SERVERSENTRY_ROOT/config/serversentry.yaml\" ]]; then
     if command -v yq >/dev/null 2>&1; then
-      yq eval '.' \"$BASE_DIR/config/serversentry.yaml\" >/dev/null;
+      yq eval '.' \"$SERVERSENTRY_ROOT/config/serversentry.yaml\" >/dev/null;
     else
       true;
     fi;
@@ -280,18 +293,18 @@ run_test "Configuration validation" "
 
 # Test 22: Plugin system test
 run_test "Plugin system functionality" "
-  \"$BASE_DIR/bin/serversentry\" list | grep -q 'cpu\\|memory\\|disk'
+  \"$SERVERSENTRY_ROOT/bin/serversentry\" list | grep -q 'cpu\\|memory\\|disk'
 " 0 "basic"
 
 # Test 23: Logging system test
 run_test "Logging system functionality" "
-  \"$BASE_DIR/bin/serversentry\" logs view >/dev/null 2>&1 ||
-  [[ -d \"$BASE_DIR/logs\" ]]
+  \"$SERVERSENTRY_ROOT/bin/serversentry\" logs view >/dev/null 2>&1 ||
+  [[ -d \"$SERVERSENTRY_ROOT/logs\" ]]
 " 0 "basic"
 
 # Test 24: Final comprehensive security check
 run_test "Final security validation" "
-  cd \"$BASE_DIR\";
+  cd \"$SERVERSENTRY_ROOT\";
   # Run a comprehensive check that exercises all modules
   timeout 30s bin/serversentry check cpu >/dev/null 2>&1 || true;
   timeout 30s bin/serversentry check memory >/dev/null 2>&1 || true;

@@ -15,7 +15,40 @@ set -e
 
 # Get the directory where the script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-BASE_DIR="$(cd "$SCRIPT_DIR/.." &>/dev/null && pwd)"
+
+# Load ServerSentry environment
+if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+  # Set bootstrap control variables
+  export SERVERSENTRY_QUIET=true
+  export SERVERSENTRY_AUTO_INIT=false
+  export SERVERSENTRY_INIT_LEVEL=minimal
+  
+  # Find and source the main bootstrap file
+  current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  while [[ "$current_dir" != "/" ]]; do
+    if [[ -f "$current_dir/serversentry-env.sh" ]]; then
+      source "$current_dir/serversentry-env.sh"
+      break
+    fi
+
+# Load unified UI framework
+if [[ -f "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh" ]]; then
+  source "${SERVERSENTRY_ROOT}/lib/ui/common/print_utils.sh"
+fi
+
+    current_dir="$(dirname "$current_dir")"
+  done
+  
+  # Verify bootstrap succeeded
+  if [[ -z "${SERVERSENTRY_ENV_LOADED:-}" ]]; then
+    echo "❌ ERROR: Failed to load ServerSentry environment" >&2
+    exit 1
+  fi
+fi
+if ! serversentry_init "minimal"; then
+  echo "FATAL: Failed to initialize ServerSentry environment" >&2
+  exit 1
+fi
 
 # Color definitions for output
 if [[ -t 1 ]] && [[ "${NO_COLOR:-}" != "1" ]] && command -v tput >/dev/null 2>&1; then
@@ -41,30 +74,11 @@ else
 fi
 
 # Print functions
-print_header() {
-  echo -e "${PURPLE}${BOLD}$1${RESET}"
-}
 
-print_success() {
-  echo -e "${GREEN}✅ $1${RESET}"
-}
 
-print_warning() {
-  echo -e "${YELLOW}⚠️  $1${RESET}"
-}
 
-print_error() {
-  echo -e "${RED}❌ $1${RESET}"
-}
 
-print_info() {
-  echo -e "${CYAN}ℹ️  $1${RESET}"
-}
 
-print_separator() {
-  local width="${1:-60}"
-  printf '%*s\n' "$width" '' | tr ' ' '='
-}
 
 # Configuration
 FORCE_RESET=false
@@ -172,7 +186,7 @@ stop_services() {
   fi
 
   # Check for running monitoring service
-  local pid_file="$BASE_DIR/serversentry.pid"
+  local pid_file="$SERVERSENTRY_ROOT/serversentry.pid"
   if [[ -f "$pid_file" ]]; then
     local pid
     pid=$(cat "$pid_file" 2>/dev/null || echo "")
@@ -240,12 +254,12 @@ remove_runtime_files() {
   fi
 
   local runtime_files=(
-    "$BASE_DIR/serversentry.pid"
-    "$BASE_DIR/*.pid"
-    "$BASE_DIR/*.lock"
-    "$BASE_DIR/tmp/*.pid"
-    "$BASE_DIR/tmp/*.lock"
-    "$BASE_DIR/.serversentry_cache"
+    "$SERVERSENTRY_ROOT/serversentry.pid"
+    "$SERVERSENTRY_ROOT/*.pid"
+    "$SERVERSENTRY_ROOT/*.lock"
+    "$SERVERSENTRY_ROOT/tmp/*.pid"
+    "$SERVERSENTRY_ROOT/tmp/*.lock"
+    "$SERVERSENTRY_ROOT/.serversentry_cache"
   )
 
   for pattern in "${runtime_files[@]}"; do
@@ -283,13 +297,13 @@ clear_logs() {
   fi
 
   local log_directories=(
-    "$BASE_DIR/logs"
-    "$BASE_DIR/logs/archive"
-    "$BASE_DIR/logs/anomaly"
-    "$BASE_DIR/logs/diagnostics"
-    "$BASE_DIR/logs/periodic"
-    "$BASE_DIR/logs/composite"
-    "$BASE_DIR/logs/config_backups"
+    "$SERVERSENTRY_ROOT/logs"
+    "$SERVERSENTRY_ROOT/logs/archive"
+    "$SERVERSENTRY_ROOT/logs/anomaly"
+    "$SERVERSENTRY_ROOT/logs/diagnostics"
+    "$SERVERSENTRY_ROOT/logs/periodic"
+    "$SERVERSENTRY_ROOT/logs/composite"
+    "$SERVERSENTRY_ROOT/logs/config_backups"
   )
 
   for log_dir in "${log_directories[@]}"; do
@@ -303,10 +317,10 @@ clear_logs() {
 
   # Clear main log files
   local main_logs=(
-    "$BASE_DIR/logs/serversentry.log"
-    "$BASE_DIR/logs/error.log"
-    "$BASE_DIR/logs/audit.log"
-    "$BASE_DIR/logs/performance.log"
+    "$SERVERSENTRY_ROOT/logs/serversentry.log"
+    "$SERVERSENTRY_ROOT/logs/error.log"
+    "$SERVERSENTRY_ROOT/logs/audit.log"
+    "$SERVERSENTRY_ROOT/logs/performance.log"
   )
 
   for log_file in "${main_logs[@]}"; do
@@ -333,18 +347,18 @@ clear_cache_and_temp() {
   fi
 
   # Clear tmp directory contents
-  if [[ -d "$BASE_DIR/tmp" ]]; then
-    execute_command_verbose "Clearing tmp directory" "find '$BASE_DIR/tmp' -type f ! -name '.gitkeep' -delete"
-    execute_command_verbose "Clearing tmp subdirectories" "find '$BASE_DIR/tmp' -type d ! -name 'tmp' -exec rm -rf {} + 2>/dev/null || true"
+  if [[ -d "$SERVERSENTRY_ROOT/tmp" ]]; then
+    execute_command_verbose "Clearing tmp directory" "find '$SERVERSENTRY_ROOT/tmp' -type f ! -name '.gitkeep' -delete"
+    execute_command_verbose "Clearing tmp subdirectories" "find '$SERVERSENTRY_ROOT/tmp' -type d ! -name 'tmp' -exec rm -rf {} + 2>/dev/null || true"
   fi
 
   # Clear plugin cache files
   local cache_patterns=(
-    "$BASE_DIR/tmp/plugin_*"
-    "$BASE_DIR/tmp/*_cache"
-    "$BASE_DIR/tmp/temp_*"
-    "$BASE_DIR/tmp/*_temp"
-    "$BASE_DIR/tmp/*.tmp"
+    "$SERVERSENTRY_ROOT/tmp/plugin_*"
+    "$SERVERSENTRY_ROOT/tmp/*_cache"
+    "$SERVERSENTRY_ROOT/tmp/temp_*"
+    "$SERVERSENTRY_ROOT/tmp/*_temp"
+    "$SERVERSENTRY_ROOT/tmp/*.tmp"
   )
 
   for pattern in "${cache_patterns[@]}"; do
@@ -353,8 +367,8 @@ clear_cache_and_temp() {
 
   # Clear system cache files
   local system_cache_files=(
-    "$BASE_DIR/.serversentry_cache"
-    "$BASE_DIR/cache"
+    "$SERVERSENTRY_ROOT/.serversentry_cache"
+    "$SERVERSENTRY_ROOT/cache"
     "/tmp/serversentry_*"
   )
 
@@ -383,9 +397,9 @@ reset_plugin_state() {
 
   # Clear plugin registry and performance data
   local plugin_state_files=(
-    "$BASE_DIR/logs/plugin_registry.json"
-    "$BASE_DIR/logs/plugin_performance.log"
-    "$BASE_DIR/logs/plugin_health.log"
+    "$SERVERSENTRY_ROOT/logs/plugin_registry.json"
+    "$SERVERSENTRY_ROOT/logs/plugin_performance.log"
+    "$SERVERSENTRY_ROOT/logs/plugin_health.log"
   )
 
   for state_file in "${plugin_state_files[@]}"; do
@@ -396,8 +410,8 @@ reset_plugin_state() {
 
   # Clear plugin cache directories
   local plugin_cache_dirs=(
-    "$BASE_DIR/logs/plugins"
-    "$BASE_DIR/cache/plugins"
+    "$SERVERSENTRY_ROOT/logs/plugins"
+    "$SERVERSENTRY_ROOT/cache/plugins"
   )
 
   for cache_dir in "${plugin_cache_dirs[@]}"; do
@@ -423,8 +437,8 @@ clear_diagnostics() {
   fi
 
   local diagnostic_dirs=(
-    "$BASE_DIR/logs/diagnostics/reports"
-    "$BASE_DIR/logs/diagnostics"
+    "$SERVERSENTRY_ROOT/logs/diagnostics/reports"
+    "$SERVERSENTRY_ROOT/logs/diagnostics"
   )
 
   for diag_dir in "${diagnostic_dirs[@]}"; do
@@ -462,9 +476,9 @@ reset_configuration() {
 
   # Configuration files to reset (but keep directories)
   local config_files=(
-    "$BASE_DIR/config/serversentry.yaml"
-    "$BASE_DIR/config/periodic.yaml"
-    "$BASE_DIR/config/diagnostics.conf"
+    "$SERVERSENTRY_ROOT/config/serversentry.yaml"
+    "$SERVERSENTRY_ROOT/config/periodic.yaml"
+    "$SERVERSENTRY_ROOT/config/diagnostics.conf"
   )
 
   for config_file in "${config_files[@]}"; do
@@ -474,18 +488,18 @@ reset_configuration() {
   done
 
   # Clear plugin configurations
-  if [[ -d "$BASE_DIR/config/plugins" ]]; then
-    execute_command_verbose "Clearing plugin configurations" "find '$BASE_DIR/config/plugins' -type f -name '*.conf' -delete"
+  if [[ -d "$SERVERSENTRY_ROOT/config/plugins" ]]; then
+    execute_command_verbose "Clearing plugin configurations" "find '$SERVERSENTRY_ROOT/config/plugins' -type f -name '*.conf' -delete"
   fi
 
   # Clear notification configurations
-  if [[ -d "$BASE_DIR/config/notifications" ]]; then
-    execute_command_verbose "Clearing notification configurations" "find '$BASE_DIR/config/notifications' -type f -delete"
+  if [[ -d "$SERVERSENTRY_ROOT/config/notifications" ]]; then
+    execute_command_verbose "Clearing notification configurations" "find '$SERVERSENTRY_ROOT/config/notifications' -type f -delete"
   fi
 
   # Clear composite check configurations
-  if [[ -d "$BASE_DIR/config/composite" ]]; then
-    execute_command_verbose "Clearing composite configurations" "find '$BASE_DIR/config/composite' -type f -delete"
+  if [[ -d "$SERVERSENTRY_ROOT/config/composite" ]]; then
+    execute_command_verbose "Clearing composite configurations" "find '$SERVERSENTRY_ROOT/config/composite' -type f -delete"
   fi
 
   print_success "Configuration files reset"
@@ -503,9 +517,9 @@ clear_environment() {
   fi
 
   local env_files=(
-    "$BASE_DIR/.env"
-    "$BASE_DIR/.env.local"
-    "$BASE_DIR/.env.production"
+    "$SERVERSENTRY_ROOT/.env"
+    "$SERVERSENTRY_ROOT/.env.local"
+    "$SERVERSENTRY_ROOT/.env.production"
   )
 
   for env_file in "${env_files[@]}"; do
@@ -531,14 +545,14 @@ recreate_directories() {
   fi
 
   local essential_dirs=(
-    "$BASE_DIR/logs"
-    "$BASE_DIR/logs/archive"
-    "$BASE_DIR/logs/diagnostics"
-    "$BASE_DIR/logs/periodic"
-    "$BASE_DIR/tmp"
-    "$BASE_DIR/config"
-    "$BASE_DIR/config/plugins"
-    "$BASE_DIR/config/notifications"
+    "$SERVERSENTRY_ROOT/logs"
+    "$SERVERSENTRY_ROOT/logs/archive"
+    "$SERVERSENTRY_ROOT/logs/diagnostics"
+    "$SERVERSENTRY_ROOT/logs/periodic"
+    "$SERVERSENTRY_ROOT/tmp"
+    "$SERVERSENTRY_ROOT/config"
+    "$SERVERSENTRY_ROOT/config/plugins"
+    "$SERVERSENTRY_ROOT/config/notifications"
   )
 
   for dir in "${essential_dirs[@]}"; do
@@ -548,7 +562,7 @@ recreate_directories() {
   done
 
   # Create .gitkeep files
-  execute_command_verbose "Creating .gitkeep in tmp" "touch '$BASE_DIR/tmp/.gitkeep'"
+  execute_command_verbose "Creating .gitkeep in tmp" "touch '$SERVERSENTRY_ROOT/tmp/.gitkeep'"
 
   print_success "Essential directories recreated"
 }
@@ -570,7 +584,7 @@ verify_reset() {
   fi
 
   # Check for PID files
-  if [[ -f "$BASE_DIR/serversentry.pid" ]]; then
+  if [[ -f "$SERVERSENTRY_ROOT/serversentry.pid" ]]; then
     print_warning "PID file still exists"
     ((issues++))
   else
@@ -579,7 +593,7 @@ verify_reset() {
 
   # Check log file sizes
   local large_logs
-  large_logs=$(find "$BASE_DIR/logs" -type f -name "*.log" -size +1k 2>/dev/null || echo "")
+  large_logs=$(find "$SERVERSENTRY_ROOT/logs" -type f -name "*.log" -size +1k 2>/dev/null || echo "")
   if [[ -n "$large_logs" ]]; then
     print_warning "Some log files still contain data"
     ((issues++))
@@ -589,7 +603,7 @@ verify_reset() {
 
   # Check cache files
   local cache_files
-  cache_files=$(find "$BASE_DIR/tmp" -type f ! -name ".gitkeep" 2>/dev/null || echo "")
+  cache_files=$(find "$SERVERSENTRY_ROOT/tmp" -type f ! -name ".gitkeep" 2>/dev/null || echo "")
   if [[ -n "$cache_files" ]]; then
     print_warning "Some cache files still exist"
     ((issues++))
@@ -641,7 +655,7 @@ main() {
   parse_arguments "$@"
 
   # Change to base directory
-  cd "$BASE_DIR"
+  cd "$SERVERSENTRY_ROOT"
 
   # Show header
   print_separator 70

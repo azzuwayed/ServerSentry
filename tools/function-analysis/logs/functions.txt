@@ -1,0 +1,5 @@
+# ServerSentry Function Definitions
+# Generated: 2025-05-27 21:50:31 UTC
+# Scope: lib
+# Format: function_name|file|line|type
+

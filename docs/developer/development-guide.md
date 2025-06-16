@@ -1,417 +1,270 @@
-# ServerSentry v2 - Development Guide
+# ServerSentry Development Guide
 
-## 📋 Table of Contents
+**Complete Guide for Developing ServerSentry Modules**
 
-1. [Architecture Overview](#architecture-overview)
-2. [Code Organization](#code-organization)
-3. [Function Registry](#function-registry)
-4. [Development Standards](#development-standards)
-5. [Testing Guidelines](#testing-guidelines)
-6. [Contributing Guidelines](#contributing-guidelines)
+## 📋 Overview
 
-## 🏗️ Architecture Overview
+This guide provides everything you need to develop high-quality, professional modules for the ServerSentry monitoring platform. ServerSentry follows enterprise-grade development standards with emphasis on modularity, reliability, and maintainability.
 
-ServerSentry v2 follows a modular, plugin-based architecture designed for scalability and maintainability.
+## 🚀 Quick Start
 
-### Core Principles
+### 1. Read the Documentation
 
-- **Separation of Concerns**: Each module has a single, well-defined responsibility
-- **Plugin Architecture**: Extensible monitoring capabilities through plugins
-- **Configuration-Driven**: Behavior controlled via YAML/config files
-- **Fail-Safe Design**: Graceful degradation when components fail
-- **Minimal Dependencies**: Pure Bash implementation for maximum compatibility
+- **[Development Standards](development-standards.md)** - Complete development standards and guidelines
+- **[Development Quick Reference](development-quick-reference.md)** - Quick reference and cheat sheet
+- **[Sample Module](examples/sample_module.sh)** - Complete working example module
+- **[Test Sample Module](examples/test_sample_module.sh)** - Comprehensive testing example
 
-### System Layers
+### 2. Set Up Your Environment
 
-```
-┌─────────────────────────────────────┐
-│           Entry Point               │
-│        bin/serversentry             │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│          User Interface             │
-│    lib/ui/cli/     lib/ui/tui/      │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│          Core Systems               │
-│  config  logging  plugin  utils     │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│         Business Logic              │
-│ anomaly composite diagnostics etc.  │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│        Plugin System                │
-│   cpu   memory   disk   process     │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│     Notification System             │
-│  teams  slack  email  webhook       │
-└─────────────────────────────────────┘
+```bash
+# Clone the repository
+git clone <repository-url>
+cd ServerSentry
+
+# Set up BASE_DIR
+export BASE_DIR="$(pwd)"
+
+# Source core utilities
+source lib/core/utils/error_utils.sh
+source lib/core/utils/documentation_utils.sh
 ```
 
-## 📁 Code Organization
+### 3. Create Your First Module
 
-### Directory Structure Standards
+```bash
+# Copy the template
+cp examples/sample_module.sh lib/core/your_module.sh
 
-```
-v2/
-├── bin/                    # Executable entry points
-├── lib/                    # Library modules
-│   ├── core/              # Core system functionality
-│   ├── plugins/           # Monitoring plugins
-│   ├── notifications/     # Notification providers
-│   └── ui/                # User interfaces
-├── config/                # Configuration files
-├── docs/                  # Documentation
-├── tests/                 # Test suites
-└── logs/                  # Runtime logs and data
+# Edit the module
+vim lib/core/your_module.sh
+
+# Test your module
+cp examples/test_sample_module.sh test_your_module.sh
+# Edit test file and run
+./test_your_module.sh
 ```
 
-### File Naming Conventions
+## 📚 Documentation Structure
 
-- **Core modules**: `snake_case.sh` (e.g., `plugin_health.sh`)
-- **Plugins**: Directory structure with `monitor.sh` entry point
-- **Configs**: `snake_case.yaml` or `.conf` extensions
-- **Tests**: Mirror source structure with `_test.sh` suffix
+### Core Documentation
 
-### Function Naming Standards
+| Document                         | Purpose                                   | Audience               |
+| -------------------------------- | ----------------------------------------- | ---------------------- |
+| `development-standards.md`       | Complete development standards            | All developers         |
+| `development-quick-reference.md` | Quick reference guide                     | Experienced developers |
+| `development-guide.md`           | This guide - overview and getting started | New developers         |
 
-- **Public API**: `modulename_action` (e.g., `config_load`, `plugin_init`)
-- **Private functions**: `_modulename_internal_action` (e.g., `_config_validate_yaml`)
-- **Utility functions**: `util_action` (e.g., `util_is_numeric`)
-- **Plugin functions**: `pluginname_action` (e.g., `cpu_get_usage`)
+### Examples and Templates
 
-## 🔧 Function Registry
+| File                             | Purpose                  | Use Case                 |
+| -------------------------------- | ------------------------ | ------------------------ |
+| `examples/sample_module.sh`      | Complete working module  | Template for new modules |
+| `examples/test_sample_module.sh` | Comprehensive test suite | Template for testing     |
 
-### Core System Functions
+### Analysis Tools
 
-#### lib/core/config.sh
+| Tool                                                      | Purpose             | Usage                    |
+| --------------------------------------------------------- | ------------------- | ------------------------ |
+| `tools/function-analysis/categorize_functions.sh`         | Function analysis   | Code quality assessment  |
+| `tools/function-analysis/extract_lib_functions_simple.sh` | Function extraction | Documentation generation |
 
-- `load_config()` - Main configuration loader
-- `config_get(key)` - Get configuration value
-- `config_set(key, value)` - Set configuration value
-- `config_validate()` - Validate configuration integrity
-- `_config_parse_yaml()` - Internal YAML parser
-- `_config_expand_vars()` - Internal variable expansion
+## 🏗️ Development Workflow
 
-#### lib/core/logging.sh
+### Step 1: Planning
 
-- `log_info(message)` - Info level logging
-- `log_warning(message)` - Warning level logging
-- `log_error(message)` - Error level logging
-- `log_debug(message)` - Debug level logging
-- `logging_init()` - Initialize logging system
-- `_log_format()` - Internal log formatter
+1. Define module purpose and scope
+2. Identify required functions
+3. Plan integration points
+4. Review existing modules for patterns
 
-#### lib/core/plugin.sh
+### Step 2: Implementation
 
-- `init_plugin_system()` - Initialize plugin system
-- `plugin_load(name)` - Load specific plugin
-- `plugin_unload(name)` - Unload specific plugin
-- `plugin_list()` - List available plugins
-- `plugin_is_loaded(name)` - Check if plugin is loaded
-- `_plugin_validate()` - Internal plugin validation
+1. Copy the sample module template
+2. Update module header and constants
+3. Implement initialization function
+4. Add core functionality functions
+5. Include comprehensive error handling
+6. Add complete documentation
 
-#### lib/core/utils.sh
+### Step 3: Testing
 
-- `util_is_numeric(value)` - Check if value is numeric
-- `util_timestamp()` - Get current timestamp
-- `util_human_readable_size(bytes)` - Convert bytes to human readable
-- `util_percentage_bar(value)` - Create ASCII percentage bar
-- `util_color_text(color, text)` - Apply color to text
+1. Copy the test template
+2. Implement function-specific tests
+3. Add error path testing
+4. Include integration tests
+5. Verify all test cases pass
 
-### Plugin System Functions
+### Step 4: Integration
 
-#### Standard Plugin Interface
+1. Update main system files if needed
+2. Add module to loading sequence
+3. Test integration with existing modules
+4. Verify backward compatibility
 
-Each plugin must implement:
+### Step 5: Quality Assurance
 
-- `${PLUGIN_NAME}_init()` - Initialize plugin
-- `${PLUGIN_NAME}_cleanup()` - Cleanup on shutdown
-- `${PLUGIN_NAME}_get_metrics()` - Return current metrics
-- `${PLUGIN_NAME}_validate_config()` - Validate plugin config
+1. Run function analysis tools
+2. Verify documentation coverage
+3. Check code quality standards
+4. Perform final testing
 
-### Notification System Functions
+## 🔧 Module Development Standards
 
-#### Standard Notification Interface
+For complete technical standards and requirements, see the **[Development Standards](development-standards.md)** document.
 
-Each notification provider must implement:
+### Key Requirements Summary
 
-- `${PROVIDER}_init()` - Initialize provider
-- `${PROVIDER}_send(message, level)` - Send notification
-- `${PROVIDER}_test()` - Test connectivity
-- `${PROVIDER}_validate_config()` - Validate provider config
+- **Complete documentation** for every function
+- **Input validation** using `util_error_validate_input`
+- **Comprehensive error handling** with proper logging
+- **Consistent naming** following `[module]_[action]_[object]` pattern
+- **Cross-platform compatibility** (Linux and macOS)
+- **Backward compatibility** - no breaking changes
 
-## 📏 Development Standards
+## 📝 Code Examples
 
-### Code Quality Standards
+For complete code examples and templates, see:
 
-1. **Error Handling**
+- **[Development Standards](development-standards.md)** - Complete function templates and patterns
+- **[Sample Module](examples/sample_module.sh)** - Working example module
+- **[Test Sample Module](examples/test_sample_module.sh)** - Complete test suite example
 
-   ```bash
-   # Always check return codes
-   if ! some_command; then
-       log_error "Command failed"
-       return 1
-   fi
+### Quick Function Template
 
-   # Use set -eo pipefail at script start
-   set -eo pipefail
-   ```
+```bash
+# Function: module_action_object
+# Description: What this function does
+# Parameters:
+#   $1 (string): parameter description
+# Returns:
+#   0 - success, 1 - failure
+# Example:
+#   result=$(module_action_object "param1")
+module_action_object() {
+  if ! util_error_validate_input "module_action_object" "1" "$#"; then
+    return 1
+  fi
 
-2. **Variable Naming**
+  local param1="$1"
 
-   ```bash
-   # Constants in UPPER_CASE
-   readonly DEFAULT_CONFIG_PATH="/etc/serversentry"
-
-   # Local variables in lower_case
-   local config_file="/path/to/config"
-
-   # Global variables with prefix
-   SERVERSENTRY_CONFIG_LOADED=false
-   ```
-
-3. **Function Documentation**
-
-   ```bash
-   # Function: function_name
-   # Description: Brief description of what the function does
-   # Parameters:
-   #   $1 - parameter description
-   #   $2 - parameter description
-   # Returns:
-   #   0 - success
-   #   1 - error description
-   # Globals:
-   #   GLOBAL_VAR - description of global variable usage
-   function_name() {
-       # Implementation
-   }
-   ```
-
-4. **Input Validation**
-
-   ```bash
-   function example_function() {
-       local input="$1"
-
-       # Validate required parameters
-       if [[ -z "$input" ]]; then
-           log_error "Input parameter required"
-           return 1
-       fi
-
-       # Validate parameter format
-       if ! util_is_numeric "$input"; then
-           log_error "Input must be numeric"
-           return 1
-       fi
-   }
-   ```
-
-### Security Standards
-
-1. **File Permissions**
-
-   - Executable scripts: `755`
-   - Configuration files: `644`
-   - Log files: `644`
-   - Sensitive configs: `600`
-
-2. **Input Sanitization**
-
-   ```bash
-   # Sanitize user input
-   sanitized_input=$(printf '%s' "$user_input" | tr -d '[:cntrl:]')
-   ```
-
-3. **Secure Temporary Files**
-   ```bash
-   # Create secure temporary files
-   temp_file=$(mktemp) || {
-       log_error "Failed to create temporary file"
-       return 1
-   }
-   trap 'rm -f "$temp_file"' EXIT
-   ```
+  # Your logic here
+  echo "result"
+  return 0
+}
+```
 
 ## 🧪 Testing Guidelines
 
-### Test Structure
+For complete testing standards and templates, see:
 
-```
-tests/
-├── unit/                  # Unit tests for individual functions
-│   ├── core/             # Tests for core modules
-│   ├── plugins/          # Tests for plugins
-│   └── notifications/    # Tests for notification providers
-└── integration/          # Integration tests
-    ├── end_to_end/       # Full system tests
-    └── scenarios/        # Specific use case tests
-```
+- **[Development Standards](development-standards.md)** - Complete testing requirements
+- **[Test Sample Module](examples/test_sample_module.sh)** - Working test example
 
-### Test Naming Convention
-
-- Unit tests: `test_${module}_${function}.sh`
-- Integration tests: `test_${scenario}.sh`
-
-### Test Framework Standards
+### Quick Test Template
 
 ```bash
 #!/usr/bin/env bash
-# Test: test_config_load
-# Description: Test configuration loading functionality
+# Test script for [module]
 
-source "$(dirname "$0")/../../lib/core/config.sh"
-source "$(dirname "$0")/../test_framework.sh"
+source "lib/core/[module].sh"
 
-test_config_load_success() {
-    # Arrange
-    local test_config="/tmp/test_config.yaml"
-    echo "enabled: true" > "$test_config"
+test_function_name() {
+  echo "Testing function_name..."
 
-    # Act
-    local result
-    result=$(CONFIG_FILE="$test_config" load_config 2>&1)
-    local exit_code=$?
+  # Test success case
+  if function_name "valid_input"; then
+    echo "✅ Success case passed"
+  else
+    echo "❌ Success case failed"
+    return 1
+  fi
 
-    # Assert
-    assert_equals 0 "$exit_code" "Should return success"
-    assert_contains "$result" "Configuration loaded" "Should log success message"
-
-    # Cleanup
-    rm -f "$test_config"
+  return 0
 }
 
 # Run tests
-run_test test_config_load_success
+test_function_name || exit 1
+echo "All tests passed!"
 ```
 
-### Coverage Requirements
+## 🔍 Available Utilities
 
-- **Core modules**: 90% function coverage
-- **Plugins**: 80% function coverage
-- **Notification providers**: 85% function coverage
-- **Integration tests**: All critical paths covered
+For complete utility documentation, see **[Development Standards](development-standards.md)**.
 
-## 🤝 Contributing Guidelines
-
-### Before Making Changes
-
-1. **Check Function Registry**: Ensure you're not duplicating existing functionality
-2. **Review Architecture**: Understand how your changes fit into the overall system
-3. **Update Documentation**: Keep this guide current with any new functions or patterns
-
-### Code Review Checklist
-
-- [ ] Follows naming conventions
-- [ ] Includes proper error handling
-- [ ] Has function documentation
-- [ ] Includes unit tests
-- [ ] Updates integration tests if needed
-- [ ] Updates this development guide
-- [ ] No code duplication
-- [ ] Security considerations addressed
-
-### Git Workflow
-
-1. Create feature branch from `main`
-2. Implement changes following standards
-3. Add/update tests
-4. Update documentation
-5. Submit pull request with detailed description
-
-### Refactoring Guidelines
-
-When refactoring existing code:
-
-1. **Identify Redundancy**: Use this guide to find duplicate functionality
-2. **Maintain Compatibility**: Ensure existing APIs still work
-3. **Update Tests**: Refactor tests alongside code
-4. **Update Documentation**: Keep this guide accurate
-5. **Performance Impact**: Consider performance implications
-
-## 🔍 Common Patterns
-
-### Configuration Pattern
+### Essential Utilities
 
 ```bash
-# Standard configuration loading pattern
-load_module_config() {
-    local config_file="${CONFIG_DIR}/${MODULE_NAME}.yaml"
+# Input validation (always use this)
+util_error_validate_input "function_name" "expected_count" "$#"
 
-    if [[ ! -f "$config_file" ]]; then
-        log_warning "Config file not found: $config_file"
-        return 1
-    fi
+# Logging (available everywhere)
+log_debug "message" "module"
+log_info "message" "module"
+log_warning "message" "module"
+log_error "message" "module"
 
-    # Load and validate configuration
-    if ! _parse_yaml_config "$config_file"; then
-        log_error "Invalid configuration: $config_file"
-        return 1
-    fi
-
-    log_info "Configuration loaded: $config_file"
-    return 0
-}
+# Safe command execution
+util_error_safe_execute "command" timeout_seconds
 ```
 
-### Plugin Registration Pattern
+## 📊 Quality Assurance
+
+For complete quality standards and checklists, see **[Development Standards](development-standards.md)**.
+
+### Quick Checklist
+
+Before submitting code:
+
+- [ ] Function documentation complete
+- [ ] Input validation implemented
+- [ ] Error handling comprehensive
+- [ ] All tests pass
+
+### Analysis Tools
 
 ```bash
-# Standard plugin registration
-register_plugin() {
-    local plugin_name="$1"
-    local plugin_dir="${PLUGINS_DIR}/${plugin_name}"
-
-    # Validate plugin structure
-    if ! _validate_plugin_structure "$plugin_dir"; then
-        return 1
-    fi
-
-    # Load plugin
-    source "${plugin_dir}/monitor.sh"
-
-    # Initialize plugin
-    if ! "${plugin_name}_init"; then
-        log_error "Failed to initialize plugin: $plugin_name"
-        return 1
-    fi
-
-    LOADED_PLUGINS+=("$plugin_name")
-    log_info "Plugin registered: $plugin_name"
-}
+# Function analysis
+./tools/function-analysis/categorize_functions.sh
 ```
 
-### Error Handling Pattern
+## 🎯 Best Practices
 
-```bash
-# Standard error handling with cleanup
-process_with_cleanup() {
-    local temp_file
-    temp_file=$(mktemp) || {
-        log_error "Failed to create temporary file"
-        return 1
-    }
+For complete best practices and patterns, see **[Development Standards](development-standards.md)**.
 
-    # Set up cleanup trap
-    trap 'rm -f "$temp_file"' EXIT
+### Essential Do's
 
-    # Main processing
-    if ! do_main_work "$temp_file"; then
-        log_error "Main processing failed"
-        return 1
-    fi
+1. **Follow the Template** - Use the sample module as a starting point
+2. **Document Everything** - Every function needs documentation
+3. **Validate Inputs** - Always use `util_error_validate_input`
+4. **Handle Errors** - Use proper error handling and logging
+5. **Test Thoroughly** - Write tests for your functions
 
-    log_info "Processing completed successfully"
-    return 0
-}
-```
+### Essential Don'ts
+
+1. **Don't Skip Validation** - Always validate inputs
+2. **Don't Use Global Variables** - Use local variables only
+3. **Don't Skip Documentation** - Document every function
+4. **Don't Break Compatibility** - Maintain backward compatibility
+
+## 📞 Getting Help
+
+### Resources
+
+- **[Development Standards](development-standards.md)** - Complete technical documentation
+- **[Sample Module](examples/sample_module.sh)** - Working example to copy
+- **[Test Example](examples/test_sample_module.sh)** - Complete test template
+- **Existing Modules** - Check `lib/core/` for patterns
+
+## 🎉 Success Criteria
+
+Your module is ready when:
+
+- [ ] All functions are documented
+- [ ] All tests pass
+- [ ] Code follows standards
+- [ ] Integration works correctly
 
 ---
 
-**Last Updated**: $(date)
-**Version**: 2.0.0
-**Maintainer**: Development Team
+**Remember**: Following these standards ensures your code integrates seamlessly with ServerSentry and maintains the high quality standards established throughout the project. Quality code is maintainable code!
